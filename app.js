@@ -14,7 +14,23 @@ function alternarOpcao(k) { opcoes[k] = !opcoes[k]; salvarPref(k, opcoes[k] ? '1
 // Velocidade da partida: ms de intervalo real por minuto simulado (90 minutos no total).
 const VELOCIDADES = { lenta: 180, normal: 90, rapida: 40 };
 const NOME_VELOCIDADE = { lenta: '🐢 Lenta', normal: '⚽ Normal', rapida: '⚡ Rápida' };
-function escolherVelocidade(v) { S.participantes = lerParticipantes(); opcoes.velocidade = v; salvarPref('velocidade', v); telaSetup(); }
+function escolherVelocidade(v, destino) {
+  opcoes.velocidade = v; salvarPref('velocidade', v);
+  if (destino === 'criar') return telaCriarSala($('oNome')?.value);
+  if (destino === 'entrar') return telaEntrarSala($('oCodigo')?.value, $('oNome')?.value);
+  S.participantes = lerParticipantes(); telaSetup();
+}
+// Opções que também valem no online (cada pessoa escolhe a sua, no próprio aparelho): às cegas
+// esconde os overalls durante o SEU draft (voltam quando o time final aparece); velocidade vale
+// pra quando as partidas rolarem. Turbo fica de fora: não tem roleta animada no online pra acelerar.
+const opcoesOnlineHtml = () => `
+  <h3>Opções</h3>
+  <div class="opcoes">
+    <label><input type="checkbox" ${opcoes.cego ? 'checked' : ''} onchange="alternarOpcao('cego')"> 🙈 Overalls às cegas <small>(só aparecem depois que todo mundo terminar)</small></label>
+  </div>
+  <h3>Velocidade da partida</h3>
+  <div class="formacoes">${Object.keys(VELOCIDADES).map(v =>
+    `<button class="btn${v === opcoes.velocidade ? '' : ' sec'}" aria-pressed="${v === opcoes.velocidade}" onclick="escolherVelocidade('${v}', '${SO._tela}')">${NOME_VELOCIDADE[v]}</button>`).join('')}</div>`;
 function alternarTema() {
   const escuro = raiz.dataset.theme ? raiz.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
   raiz.dataset.theme = escuro ? 'light' : 'dark';
@@ -273,17 +289,20 @@ function telaOnlineMenu() {
   </section>`;
 }
 
-function telaCriarSala() {
+function telaCriarSala(nomeAtual) {
   SO.formacao ??= '4-3-3';
+  SO._tela = 'criar';
+  const nome = nomeAtual ?? lerPref('nomeOnline') ?? '';
   $app.innerHTML = `
   <section class="tela">
     <button class="voltar" onclick="telaOnlineMenu()">← Online</button>
     <h2>Criar sala</h2>
-    <div class="nomes"><input id="oNome" maxlength="16" placeholder="Seu nome" value="${esc(lerPref('nomeOnline') || '')}"></div>
+    <div class="nomes"><input id="oNome" maxlength="16" placeholder="Seu nome" value="${esc(nome)}"></div>
     <h3>Formação (igual pra todos)</h3>
     <div class="formacoes">${Object.keys(FORMACOES).map(f =>
-      `<button class="btn${f === SO.formacao ? '' : ' sec'}" aria-pressed="${f === SO.formacao}" onclick="SO.formacao='${f}'; telaCriarSala()">${f}</button>`).join('')}
-      <button class="btn sec" onclick="SO.formacao = sortear(Object.keys(FORMACOES)); telaCriarSala()">🎲 Sortear</button></div>
+      `<button class="btn${f === SO.formacao ? '' : ' sec'}" aria-pressed="${f === SO.formacao}" onclick="SO.formacao='${f}'; telaCriarSala($('oNome').value)">${f}</button>`).join('')}
+      <button class="btn sec" onclick="SO.formacao = sortear(Object.keys(FORMACOES)); telaCriarSala($('oNome').value)">🎲 Sortear</button></div>
+    ${opcoesOnlineHtml()}
     <p class="dica" id="oErro"></p>
     <button class="btn" id="oBtn" onclick="criarSalaClique()">Criar sala</button>
   </section>`;
@@ -321,15 +340,18 @@ function copiarCodigoClique(codigo) {
   );
 }
 
-function telaEntrarSala() {
+function telaEntrarSala(codigoAtual, nomeAtual) {
+  SO._tela = 'entrar';
+  const codigo = codigoAtual ?? '', nome = nomeAtual ?? lerPref('nomeOnline') ?? '';
   $app.innerHTML = `
   <section class="tela">
     <button class="voltar" onclick="telaOnlineMenu()">← Online</button>
     <h2>Entrar em sala</h2>
     <div class="nomes">
-      <input id="oCodigo" maxlength="4" placeholder="Código (ex: ABCD)" style="text-transform:uppercase">
-      <input id="oNome" maxlength="16" placeholder="Seu nome" value="${esc(lerPref('nomeOnline') || '')}">
+      <input id="oCodigo" maxlength="4" placeholder="Código (ex: ABCD)" style="text-transform:uppercase" value="${esc(codigo)}">
+      <input id="oNome" maxlength="16" placeholder="Seu nome" value="${esc(nome)}">
     </div>
+    ${opcoesOnlineHtml()}
     <p class="dica" id="oErro"></p>
     <button class="btn" id="oBtn" onclick="entrarSalaClique()">Entrar</button>
   </section>`;
@@ -397,7 +419,7 @@ function telaRoletaOnline() {
   SO.time ??= novoTime(sala.participantes[meuId()].nome, sala.formacao);
   const rodada = SO.time.escalacao.filter(Boolean).length;
   if (rodada >= sala.clubesOrdem.length) return finalizarDraftOnline();
-  const clubeId = sala.clubesOrdem[rodada], c = CLUBE[clubeId];
+  const clubeId = sala.clubesOrdem[rodada], c = CLUBE[clubeId], cego = opcoes.cego;
   $app.innerHTML = `
   <section class="tela">
     <div class="rodada"><span>Sala ${esc(SO.codigo)} · Rodada ${rodada + 1}/${sala.clubesOrdem.length}</span><span>${c.nome}</span></div>
@@ -405,15 +427,15 @@ function telaRoletaOnline() {
     <div class="escolha">
       <div class="lista">${c.jogadores.map((p, i) => `
         <button class="jogador" onclick="telaEscolhaOnline(${i})" ${slotsLivres(SO.time, p.pos).length ? '' : 'disabled'}>
-          <span class="pos">${p.pos}</span><span class="nome">${esc(p.nome)}</span><span class="ovr">${p.ovr}</span></button>`).join('')}</div>
-      <div>${placa(SO.time)}${campo(SO.time)}</div>
+          <span class="pos">${p.pos}</span><span class="nome">${esc(p.nome)}</span><span class="ovr">${cego ? '??' : p.ovr}</span></button>`).join('')}</div>
+      <div>${placa(SO.time, cego)}${campo(SO.time, cego)}</div>
     </div>
   </section>`;
 }
 
 function telaEscolhaOnline(sel, cobreSel) {
   const sala = SO.sala, rodada = SO.time.escalacao.filter(Boolean).length;
-  const clubeId = sala.clubesOrdem[rodada], c = CLUBE[clubeId], j = c.jogadores[sel];
+  const clubeId = sala.clubesOrdem[rodada], c = CLUBE[clubeId], j = c.jogadores[sel], cego = opcoes.cego;
   const livres = slotsLivres(SO.time, j.pos);
   const tit = livres.find(i => i !== RES), res = livres.find(i => i === RES);
   let banco = '';
@@ -421,10 +443,10 @@ function telaEscolhaOnline(sel, cobreSel) {
     const opcoesCobre = coberturas(SO.time, j.pos);
     const escolhida = cobreSel && opcoesCobre.includes(cobreSel) ? cobreSel : opcoesCobre[0];
     banco = `<div class="banco-cobre">
-      <p class="dica">No banco, cobrindo (overall se precisar entrar):</p>
+      <p class="dica">${cego ? 'No banco, cobrindo:' : 'No banco, cobrindo (overall se precisar entrar):'}</p>
       <div class="cobre-opcoes">${opcoesCobre.map(p => `
         <button class="chip-cobre${p === escolhida ? ' sel' : ''}" onclick="telaEscolhaOnline(${sel}, '${p}')">
-          <span class="pos">${p}</span><b>${j.ovr - penalidade(j.pos, p)}</b></button>`).join('')}</div>
+          <span class="pos">${p}</span>${cego ? '' : `<b>${j.ovr - penalidade(j.pos, p)}</b>`}</button>`).join('')}</div>
       <button class="btn${tit !== undefined ? ' sec' : ''}" onclick="confirmarOnline(${sel}, ${res}, '${escolhida}')">${esc(j.nome)} no banco cobrindo ${escolhida}</button>
     </div>`;
   }
@@ -436,8 +458,8 @@ function telaEscolhaOnline(sel, cobreSel) {
     <div class="escolha">
       <div class="lista">${c.jogadores.map((p, i) => `
         <button class="jogador${i === sel ? ' sel' : ''}" onclick="telaEscolhaOnline(${i})" ${slotsLivres(SO.time, p.pos).length ? '' : 'disabled'}>
-          <span class="pos">${p.pos}</span><span class="nome">${esc(p.nome)}</span><span class="ovr">${p.ovr}</span></button>`).join('')}</div>
-      <div>${placa(SO.time)}${campo(SO.time)}</div>
+          <span class="pos">${p.pos}</span><span class="nome">${esc(p.nome)}</span><span class="ovr">${cego ? '??' : p.ovr}</span></button>`).join('')}</div>
+      <div>${placa(SO.time, cego)}${campo(SO.time, cego)}</div>
     </div>
   </section>`;
 }
