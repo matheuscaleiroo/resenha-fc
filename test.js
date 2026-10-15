@@ -88,20 +88,32 @@ for (let k = 0; k < 50; k++) assert.match(O.gerarCodigo(), /^[ABCDEFGHJKLMNPQRST
 const id1 = O.meuId(), id2 = O.meuId();
 assert.equal(id1, id2, 'meuId devia ser estável entre chamadas (mesmo "aparelho")');
 
-// serializarTime/jogadorPorId/timeDaSala: ida e volta sem perder informação (precisa de ids reais
-// no formato "CLUBE:Nome" do data.js, por isso usa um time draftado de verdade, não o `time()` sintético)
-const timeOriginal = O.draftarBotOnline({ nome: 'Sala', bot: 'dificil' }, [...CLUBES].map(c => c.id), '4-3-3');
-const ids = O.serializarTime(timeOriginal);
-assert(ids.every(id => typeof id === 'string'), 'todo slot preenchido devia virar um id (string)');
-const reconstruido = O.timeDaSala({ nome: 'Sala', escalacao: ids, reservaCobre: 'ZAG', tatica: 'ofensivo' }, '4-3-3');
-assert.deepStrictEqual(reconstruido.escalacao.map(j => j.id), timeOriginal.escalacao.map(j => j.id));
-assert.equal(reconstruido.reservaCobre, 'ZAG');
+// draftarBotOnline/jogadorPorId/timeDaSala: ida e volta sem perder informação (picks reconstroem
+// o mesmo time a partir só dos ids — precisa de ids reais "CLUBE:Nome" do data.js, por isso usa
+// um time draftado de verdade, não o `time()` sintético)
+const clubesOnline = [...CLUBES].map(c => c.id);
+const { t: timeOriginal, picks } = O.draftarBotOnline({ nome: 'Sala', bot: 'dificil' }, clubesOnline, '4-3-3');
+assert.equal(Object.keys(picks).length, clubesOnline.length, 'uma pick por rodada/clube');
+const reconstruido = O.timeDaSala({ nome: 'Sala', picks, tatica: 'ofensivo' }, '4-3-3');
+assert.deepStrictEqual(reconstruido.escalacao.map(j => j?.id), timeOriginal.escalacao.map(j => j?.id));
+assert.equal(reconstruido.reservaCobre, timeOriginal.reservaCobre);
 assert.equal(reconstruido.tatica, 'ofensivo');
 
 // draftarBotOnline: preenche os 12 slots sem ver ninguém (sem sabotagem possível, já que jaEscolhidos é sempre [])
 const ordemOnline = [...CLUBES].sort(() => Math.random() - 0.5).map(c => c.id);
-const botOnline = O.draftarBotOnline({ nome: 'Bot', bot: 'impossivel' }, ordemOnline, '3-5-2');
+const { t: botOnline, picks: picksBotOnline } = O.draftarBotOnline({ nome: 'Bot', bot: 'impossivel' }, ordemOnline, '3-5-2');
 assert(botOnline.escalacao.every(Boolean), 'bot online devia preencher os 12 slots');
+
+// rodadaCompleta: só fecha quando TODOS os participantes (bots inclusive) picaram aquela rodada
+const salaFake = { participantes: { h: { picks: { 0: { jogador: 'x', slot: 0 } } }, b: { bot: 'facil', picks: picksBotOnline } } };
+assert.equal(O.rodadaCompleta(salaFake, 0), true, 'rodada 0: os dois picaram');
+assert.equal(O.rodadaCompleta(salaFake, 1), false, 'rodada 1: só o bot picou, humano ainda não');
+
+// taticaCompleta: bot não precisa confirmar nada, só os humanos
+const salaTatica = { participantes: { h: { bot: null, taticaPronto: false }, b: { bot: 'facil' } } };
+assert.equal(O.taticaCompleta(salaTatica), false, 'humano ainda não confirmou');
+salaTatica.participantes.h.taticaPronto = true;
+assert.equal(O.taticaCompleta(salaTatica), true, 'bot não bloqueia, só faltava o humano');
 const mediaOvr = {};
 let sabotagens = 0;
 for (const nivel of Object.keys(L.NIVEIS)) {

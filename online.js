@@ -1,9 +1,7 @@
-// Modo online (Firebase Realtime Database). Decisão de design (ver DECISOES.md #20):
-// cada pessoa faz o PRÓPRIO draft no PRÓPRIO aparelho, na mesma sequência de clubes da sala
-// (ninguém vê a escolha de ninguém até todo mundo terminar — como no modo local, só que sem
-// precisar passar o aparelho). No final, cada time vira um punhado de IDs de jogador (strings),
-// e a simulação das partidas usa uma semente compartilhada (rngDe, de logic.js) — assim todo
-// aparelho calcula o MESMO resultado sem precisar sincronizar gol a gol pela rede.
+// Modo online (Firebase Realtime Database). v1.3: sincronizado — todo mundo passa pelas mesmas
+// fases ao mesmo tempo (lobby → draft rodada a rodada com roleta ao vivo → revelação → tática →
+// jogos um de cada vez), o anfitrião controla o ritmo (avança rodada/jogo), e só ele decide às
+// cegas e velocidade na criação da sala. Ver DECISOES.md #20 e #23 pra decisões de arquitetura.
 
 // ---------- pedaços que não dependem do Firebase (testáveis no Node) ----------
 const CLUBE = Object.fromEntries(CLUBES.map(c => [c.id, c]));
@@ -22,37 +20,50 @@ function meuId() {
 const ALFABETO_CODIGO = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const gerarCodigo = () => Array.from({ length: 4 }, () => ALFABETO_CODIGO[Math.floor(Math.random() * ALFABETO_CODIGO.length)]).join('');
 
-// Time -> só os IDs dos jogadores por slot (data.js é igual no aparelho de todo mundo, então o
-// ID basta; mandar o objeto inteiro pela rede seria redundante).
-const serializarTime = t => t.escalacao.map(j => j && j.id);
 const jogadorPorId = id => CLUBE[id.split(':')[0]].jogadores.find(j => j.id === id);
 
-// Reconstrói um time a partir do que veio da sala (participante salvo no Firebase).
+// Reconstrói um time a partir do que veio da sala: cada "pick" é {jogador, slot, cobre}, uma
+// entrada por rodada de draft. data.js é igual no aparelho de todo mundo, então o id basta —
+// mandar o objeto do jogador inteiro pela rede seria redundante.
 function timeDaSala(p, formacao) {
   const t = novoTime(p.nome, formacao);
-  t.escalacao = (p.escalacao || t.escalacao).map(id => (id ? jogadorPorId(id) : null));
-  t.reservaCobre = p.reservaCobre || null;
+  Object.values(p.picks || {}).forEach(pick => {
+    t.escalacao[pick.slot] = jogadorPorId(pick.jogador);
+    if (pick.slot === RES) t.reservaCobre = pick.cobre || null;
+  });
   t.tatica = p.tatica || 'neutro';
   t.bot = p.bot || null;
   return t;
 }
 
-// Bot online: draft tudo de uma vez, sem ver ninguém (no online não existe "ver a rodada dos
-// outros em tempo real" — cada humano joga no próprio tempo). A sabotagem do Impossível não
-// tem o que sabotar aqui; o bônus explícito na partida continua valendo do mesmo jeito.
+// Bot online: draft tudo de uma vez, sem ver ninguém (não tem "ver a rodada dos outros" pra um
+// bot — ele não está numa sala de espera). A sabotagem do Impossível não tem o que sabotar aqui;
+// o bônus explícito na partida continua valendo do mesmo jeito. Devolve o time (pra uso local) e
+// o mapa de picks por rodada, no formato que a sala guarda.
 function draftarBotOnline(p, clubesOrdem, formacao) {
   const t = novoTime(p.nome, formacao);
+  const picks = {};
   clubesOrdem.forEach((clubeId, r) => {
     const futuros = clubesOrdem.slice(r + 1).map(id => CLUBE[id]);
     const { j, i, cobre } = escolhaDoBot(t, CLUBE[clubeId], futuros, p.bot, [], Math.random);
     t.escalacao[i] = j;
     if (i === RES && cobre) t.reservaCobre = cobre;
+    picks[r] = { jogador: j.id, slot: i, cobre: i === RES ? (cobre || null) : null };
   });
-  return t;
+  return { t, picks };
 }
 
+// Uma rodada só avança quando TODO MUNDO (bots inclusive, mas eles já nascem com os picks prontos)
+// registrou a escolha daquela rodada. Pura — só olha o estado da sala.
+const rodadaCompleta = (sala, rodada) => Object.values(sala.participantes).every(p => p.picks && p.picks[rodada] != null);
+
+// Tática: só os humanos precisam confirmar (bot não escolhe sozinho até aqui — ver taticaDoBot,
+// calculado na hora de montar os jogos, sem precisar gravar nada na sala).
+const taticaCompleta = sala => Object.values(sala.participantes).every(p => p.bot || p.taticaPronto);
+
 if (typeof module !== 'undefined') module.exports = {
-  meuId, gerarCodigo, serializarTime, jogadorPorId, timeDaSala, draftarBotOnline, lerPref, salvarPref,
+  meuId, gerarCodigo, jogadorPorId, timeDaSala, draftarBotOnline, rodadaCompleta, taticaCompleta,
+  lerPref, salvarPref,
 };
 
 // ---------- Firebase (só existe no navegador, com o SDK carregado) ----------
@@ -65,14 +76,16 @@ function conectarFirebase() {
   return dbOnline;
 }
 
-async function criarSalaOnline(nome, formacao) {
+async function criarSalaOnline(nome, formacao, cego, velocidade) {
   const db = conectarFirebase();
   const codigo = gerarCodigo();
   const id = meuId();
   const clubesOrdem = embaralharCom(CLUBES.map(c => c.id), Math.random);
   await db.ref(`salas/${codigo}`).set({
-    criada: Date.now(), formacao, clubesOrdem, semente: novaSemente(), estado: 'draft', anfitriao: id,
-    participantes: { [id]: { nome, bot: null, pronto: false, taticaPronto: false, escalacao: null, reservaCobre: null, tatica: null } },
+    criada: Date.now(), formacao, clubesOrdem, semente: novaSemente(), anfitriao: id,
+    cego: !!cego, velocidade: velocidade || 'normal',
+    estado: 'lobby', rodadaAtual: 0,
+    participantes: { [id]: { nome, bot: null, picks: {}, tatica: null, taticaPronto: false } },
   });
   return codigo;
 }
@@ -83,10 +96,11 @@ async function entrarSalaOnline(codigo, nome) {
   const snap = await ref.once('value');
   if (!snap.exists()) throw new Error('Sala não encontrada. Confere o código com quem criou.');
   const sala = snap.val();
-  if (Object.keys(sala.participantes || {}).length >= 6) throw new Error('Essa sala já tem 6 jogadores (o máximo).');
+  if (sala.estado !== 'lobby') throw new Error('Essa sala já começou — pede pra quem criou abrir outra.');
   const id = meuId();
+  if (!sala.participantes[id] && Object.keys(sala.participantes).length >= 6) throw new Error('Essa sala já tem 6 jogadores (o máximo).');
   if (!sala.participantes[id]) {
-    await ref.child(`participantes/${id}`).set({ nome, bot: null, pronto: false, taticaPronto: false, escalacao: null, reservaCobre: null, tatica: null });
+    await ref.child(`participantes/${id}`).set({ nome, bot: null, picks: {}, tatica: null, taticaPronto: false });
   }
   return sala;
 }
@@ -95,10 +109,9 @@ async function adicionarBotOnline(codigo, nivel) {
   const db = conectarFirebase();
   const id = 'bot' + Math.random().toString(36).slice(2, 8);
   const sala = (await db.ref(`salas/${codigo}`).once('value')).val();
-  const t = draftarBotOnline({ nome: `Bot ${NIVEIS[nivel]}`, bot: nivel }, sala.clubesOrdem, sala.formacao);
+  const { picks } = draftarBotOnline({ nome: `Bot ${NIVEIS[nivel]}`, bot: nivel }, sala.clubesOrdem, sala.formacao);
   await db.ref(`salas/${codigo}/participantes/${id}`).set({
-    nome: `Bot ${NIVEIS[nivel]}`, bot: nivel, pronto: true, taticaPronto: true,
-    escalacao: serializarTime(t), reservaCobre: t.reservaCobre, tatica: null,
+    nome: `Bot ${NIVEIS[nivel]}`, bot: nivel, picks, tatica: null, taticaPronto: false,
   });
   return id;
 }
@@ -110,18 +123,28 @@ function ouvirSala(codigo, cb) {
   return () => ref.off('value');
 }
 
-function salvarEscalacaoOnline(codigo, time) {
-  const db = conectarFirebase();
-  return db.ref(`salas/${codigo}/participantes/${meuId()}`).update({
-    escalacao: serializarTime(time), reservaCobre: time.reservaCobre, pronto: true,
-  });
+const iniciarDraftOnline = codigo => conectarFirebase().ref(`salas/${codigo}/estado`).set('draft');
+
+function registrarPickOnline(codigo, rodada, slot, jogadorId, cobre) {
+  return conectarFirebase().ref(`salas/${codigo}/participantes/${meuId()}/picks/${rodada}`)
+    .set({ jogador: jogadorId, slot, cobre: cobre ?? null });
 }
 
-function salvarTaticaOnline(codigo, tatica) {
-  const db = conectarFirebase();
-  return db.ref(`salas/${codigo}/participantes/${meuId()}`).update({ tatica, taticaPronto: true });
-}
+const avancarRodadaOnline = (codigo, rodada) => conectarFirebase().ref(`salas/${codigo}/rodadaAtual`).set(rodada);
 
-function avancarEstadoOnline(codigo, estado) {
-  return conectarFirebase().ref(`salas/${codigo}/estado`).set(estado);
-}
+const iniciarRevelacaoOnline = (codigo, revelOrdem) =>
+  conectarFirebase().ref(`salas/${codigo}`).update({ estado: 'revelacao', revelOrdem, revelAtual: 0 });
+
+const avancarRevelacaoOnline = (codigo, i) => conectarFirebase().ref(`salas/${codigo}/revelAtual`).set(i);
+
+const iniciarTaticaOnline = codigo => conectarFirebase().ref(`salas/${codigo}/estado`).set('tatica');
+
+const salvarTaticaOnline = (codigo, tatica) =>
+  conectarFirebase().ref(`salas/${codigo}/participantes/${meuId()}`).update({ tatica, taticaPronto: true });
+
+const iniciarJogosOnline = (codigo, jogosOrdem) =>
+  conectarFirebase().ref(`salas/${codigo}`).update({ estado: 'jogos', jogosOrdem, jogoAtual: 0 });
+
+const avancarJogoOnline = (codigo, i) => conectarFirebase().ref(`salas/${codigo}/jogoAtual`).set(i);
+
+const finalizarOnline = codigo => conectarFirebase().ref(`salas/${codigo}/estado`).set('fim');

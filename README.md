@@ -6,9 +6,9 @@ Depois escolhe a tática (ataque, neutro ou defesa) e os times se enfrentam numa
 
 **Jogar:** https://matheuscaleiroo.github.io/resenha-fc/
 
-## Jogar online (cada um no seu aparelho)
-No menu, escolha **Online** → **Criar sala** (vira um código de 4 letras) e manda pros amigos, que escolhem **Entrar em sala** com esse código.
-Cada um faz o próprio draft no seu tempo. Quando todo mundo terminar, aparece "X/Y prontos" — quem criou a sala avança pra tática e depois pro jogo, que todo mundo vê.
+## Jogar online (cada um no seu aparelho, sincronizado)
+No menu, escolha **Online** → **Criar sala** (escolhe formação, às cegas e velocidade, e vira um código de 4 letras) e manda pros amigos, que escolhem **Entrar em sala** com esse código.
+Todo mundo cai numa sala de espera; quem criou decide quando começar. Dali em diante é tudo junto: a roleta sorteia o clube ao vivo pra todo mundo, cada um escolhe seu jogador em segredo, e só passa pra próxima rodada quando todo mundo tiver escolhido. No fim do draft tem a revelação (clube por clube, igual ao modo local), depois a tática, e os jogos rolam um de cada vez — quem criou a sala libera o próximo.
 
 ## No iPhone (funciona offline)
 1. Abra o link acima no **Safari** (precisa ser o Safari).
