@@ -34,7 +34,7 @@ const MAX_POR_POSICAO = { GOL: 2, LAT: 4, ZAG: 4, MEI: 6, ATA: 5 };
 // Overall estimado: log do valor de mercado (€1 mi ≈ 68, €10 mi ≈ 79) + bônus pra veterano
 // (valor despenca com a idade, a bola nem tanto). ponytail: heurística, ajuste os números à mão em data.js se quiser.
 // Ajuste manual: o valor de mercado não enxerga lenda veterana. Nome exatamente como no Transfermarkt.
-const AJUSTES = { 'Thiago Silva': 79 };
+const AJUSTES = { 'Thiago Silva': 79, 'Jonathan Calleri': 78, 'Luciano': 76 };
 
 function overall(euros, idade, nome) {
   if (AJUSTES[nome]) return AJUSTES[nome];

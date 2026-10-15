@@ -2,6 +2,9 @@
 
 Resumo do que mudou em cada versão, pra quem joga (não é o histórico técnico — isso fica no `DECISOES.md`).
 
+## 1.3.1 — 2026-10-15
+- Jonathan Calleri e Luciano (São Paulo) entraram no elenco — o valor de mercado deles é baixo por conta da idade, mas os dois seguem titulares de referência. Ajuste manual, igual já era feito com o Thiago Silva.
+
 ## 1.3 — 2026-10-15
 Modo online deixou de ser "cada um no seu tempo" e virou sincronizado, parecido com jogar no mesmo aparelho:
 - **Sala de espera** antes do draft: todo mundo entra, o anfitrião vê quem chegou e só ele começa quando quiser.

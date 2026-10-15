@@ -86,10 +86,10 @@ const CLUBES = [
     MEI 73 Cauly
     MEI 71 Djhordney
     ATA 78 Artur
+    ATA 78 Jonathan Calleri
+    ATA 76 Luciano
     ATA 75 Lucas Moura
-    ATA 75 Ryan Francisco
-    ATA 74 Victor Sá
-    ATA 73 Ferreirinha` },
+    ATA 75 Ryan Francisco` },
   { id: 'SAN', nome: 'Santos', bg: '#f4f4f4', elenco: `
     GOL 80 Gabriel Brazão
     GOL 73 João Paulo
