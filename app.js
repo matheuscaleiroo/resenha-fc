@@ -295,8 +295,30 @@ async function criarSalaClique() {
   $('oBtn').disabled = true;
   try {
     const codigo = await criarSalaOnline(nome, SO.formacao);
-    entrarNaSalaLocal(codigo);
+    telaSalaCriada(codigo);
   } catch (e) { $('oErro').textContent = '⚠ ' + e.message; $('oBtn').disabled = false; }
+}
+
+// Mostra o código antes de cair no draft — sem essa tela, quem cria a sala nunca via o código
+// pra mandar pros amigos (ia direto escolhendo jogador).
+function telaSalaCriada(codigo) {
+  $app.innerHTML = `
+  <section class="tela centro">
+    <p class="dica">Sala criada! Manda esse código pro grupo:</p>
+    <h1 class="grande" id="oCodigoGrande">${esc(codigo)}</h1>
+    <div class="acoes centralizado">
+      <button class="btn sec" id="oCopiar" onclick="copiarCodigoClique('${codigo}')">📋 Copiar código</button>
+    </div>
+    <p class="dica">Cada um entra em <b>Online → Entrar em sala</b> com esse código. Quando quiser, comece o seu draft — não precisa esperar os outros entrarem primeiro.</p>
+    <button class="btn" onclick="entrarNaSalaLocal('${codigo}')">Começar meu draft</button>
+  </section>`;
+}
+
+function copiarCodigoClique(codigo) {
+  navigator.clipboard?.writeText(codigo).then(
+    () => { $('oCopiar').textContent = '✅ Copiado!'; setTimeout(() => { if ($('oCopiar')) $('oCopiar').textContent = '📋 Copiar código'; }, 1500); },
+    () => {},
+  );
 }
 
 function telaEntrarSala() {
@@ -378,7 +400,7 @@ function telaRoletaOnline() {
   const clubeId = sala.clubesOrdem[rodada], c = CLUBE[clubeId];
   $app.innerHTML = `
   <section class="tela">
-    <div class="rodada"><span>Rodada ${rodada + 1}/${sala.clubesOrdem.length}</span><span>${c.nome}</span></div>
+    <div class="rodada"><span>Sala ${esc(SO.codigo)} · Rodada ${rodada + 1}/${sala.clubesOrdem.length}</span><span>${c.nome}</span></div>
     <p class="dica">Escolha um jogador do ${c.nome}. Ninguém mais vê sua escolha até todo mundo terminar.</p>
     <div class="escolha">
       <div class="lista">${c.jogadores.map((p, i) => `
@@ -408,7 +430,7 @@ function telaEscolhaOnline(sel, cobreSel) {
   }
   $app.innerHTML = `
   <section class="tela">
-    <div class="rodada"><span>Rodada ${rodada + 1}/${sala.clubesOrdem.length}</span><span>${c.nome}</span></div>
+    <div class="rodada"><span>Sala ${esc(SO.codigo)} · Rodada ${rodada + 1}/${sala.clubesOrdem.length}</span><span>${c.nome}</span></div>
     <div class="acoes">${tit !== undefined ? `<button class="btn" onclick="confirmarOnline(${sel}, ${tit})">Escalar ${esc(j.nome)} (${j.pos})</button>` : ''}</div>
     ${banco}
     <div class="escolha">
