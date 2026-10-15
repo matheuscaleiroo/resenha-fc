@@ -10,13 +10,48 @@ const FORMACOES = {
 };
 const RES = 11;
 const VAZIO = 50;              // "overall" de uma posição sem ninguém (jogar com 10 dói, mas não é W.O.)
-const FORA_DE_POSICAO = 8;     // penalidade da reserva jogando fora da posição
 const SENSIBILIDADE = 10;      // ajuste fino: menor = overall pesa mais no placar
 const PESO_GOL = { GOL: 0.02, LAT: 0.6, ZAG: 0.5, MEI: 2, ATA: 5 };
+const POSICOES = ['GOL', 'LAT', 'ZAG', 'MEI', 'ATA'];
+
+// Fora de posição: linha = posição de verdade, coluna = onde foi escalado. Posição vizinha dói pouco
+// (lateral vira zagueiro), extremo dói muito, e qualquer um da linha no gol é desastre.
+const PENALIDADE = {
+  GOL: { GOL: 0, LAT: 16, ZAG: 14, MEI: 20, ATA: 20 },
+  LAT: { GOL: 24, LAT: 0, ZAG: 4, MEI: 5, ATA: 9 },
+  ZAG: { GOL: 22, LAT: 4, ZAG: 0, MEI: 7, ATA: 12 },
+  MEI: { GOL: 26, LAT: 5, ZAG: 7, MEI: 0, ATA: 4 },
+  ATA: { GOL: 26, LAT: 9, ZAG: 12, MEI: 4, ATA: 0 },
+};
+// 'RES' (banco) não é posição de campo: no banco ninguém joga, então não há penalidade.
+const penalidade = (real, slot) => PENALIDADE[real]?.[slot] ?? 0;
+
+// Postura escolhida depois de ver o time montado. Trocar ataque por defesa muda o número de gols:
+// jogo aberto premia o time melhor (mais gols = menos sorte), jogo travado abre espaço pra zebra.
+const TATICAS = {
+  ofensivo: { nome: 'Ofensivo', icone: '⚔️', ataque: 3, defesa: -3, dica: 'Time todo na frente. Chove gol dos dois lados, e jogo aberto premia quem tem o melhor time.' },
+  neutro: { nome: 'Neutro', icone: '⚖️', ataque: 0, defesa: 0, dica: 'Sem bônus e sem risco. O jogo sai como o time é.' },
+  defensivo: { nome: 'Defensivo', icone: '🛡️', ataque: -3, defesa: 3, dica: 'Fecha atrás e segura. Placar magro, muito empate — é a chance da zebra.' },
+};
+const tatica = t => TATICAS[t?.tatica] ?? TATICAS.neutro;
+
+// RNG com semente: a mesma semente dá o mesmo jogo em todos os aparelhos (necessário no modo online).
+// Cada uso ganha uma semente derivada própria, pra que pular uma tela num aparelho não desalinhe o resto.
+function rngDe(semente) {
+  let a = semente >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const novaSemente = () => Math.floor(Math.random() * 2 ** 31);
+const embaralharCom = (a, rng) => a.map(x => [rng(), x]).sort((p, q) => p[0] - q[0]).map(p => p[1]);
 
 const novoTime = (nome, formacao) => {
   const slots = [...FORMACOES[formacao].flat(), 'RES'];
-  return { nome, formacao, slots, escalacao: Array(slots.length).fill(null) };
+  return { nome, formacao, slots, escalacao: Array(slots.length).fill(null), reservaCobre: null, tatica: 'neutro' };
 };
 
 const slotsLivres = (t, pos) =>
@@ -24,8 +59,18 @@ const slotsLivres = (t, pos) =>
 
 const ovrEfetivo = (t, i) => {
   const j = t.escalacao[i];
-  return i === RES || t.slots[i] === j.pos ? j.ovr : j.ovr - FORA_DE_POSICAO;
+  return j.ovr - penalidade(j.pos, t.slots[i]);
 };
+
+// Quanto a reserva valeria entrando na posição que foi escolhida pra ela cobrir.
+const ovrReserva = t => {
+  const j = t.escalacao[RES];
+  return j ? j.ovr - penalidade(j.pos, t.reservaCobre) : null;
+};
+
+// Posições de campo que existem nesta formação, da que menos dói pro jogador até a que mais dói.
+const coberturas = (t, pos) =>
+  [...new Set(t.slots.slice(0, RES))].sort((a, b) => penalidade(pos, a) - penalidade(pos, b) || POSICOES.indexOf(a) - POSICOES.indexOf(b));
 
 // Jogador escolhido por 2+ pessoas sai de todos os times; a reserva cobre um buraco.
 function resolverDuplicados(times) {
@@ -38,7 +83,10 @@ function resolverDuplicados(times) {
     const reserva = t.escalacao[RES];
     if (!reserva) return;
     const buracos = t.slots.map((_, i) => i).filter(i => i !== RES && !t.escalacao[i]);
-    const buraco = buracos.find(i => t.slots[i] === reserva.pos) ?? buracos[0];
+    // a posição que a pessoa mandou ela cobrir vem primeiro; se não abriu buraco lá, cobre o que tem
+    const buraco = buracos.find(i => t.slots[i] === t.reservaCobre)
+      ?? buracos.find(i => t.slots[i] === reserva.pos)
+      ?? buracos.sort((x, y) => penalidade(reserva.pos, t.slots[x]) - penalidade(reserva.pos, t.slots[y]))[0];
     if (buraco !== undefined) { t.escalacao[buraco] = reserva; t.escalacao[RES] = null; }
   });
   return repetidos;
@@ -50,7 +98,7 @@ function forca(t) {
   const idx = pos => t.slots.map((p, i) => (pos.includes(p) && i !== RES ? i : -1)).filter(i => i >= 0);
   const goleiro = idx(['GOL']).map(v);
   return {
-    geral: Math.round(media(idx(['GOL', 'LAT', 'ZAG', 'MEI', 'ATA']).map(v))),
+    geral: Math.round(media(idx(POSICOES).map(v))),
     ataque: media(idx(['MEI', 'ATA']).map(v)),
     defesa: media([...goleiro, ...goleiro, ...idx(['LAT', 'ZAG']).map(v)]),
   };
@@ -82,7 +130,9 @@ const NIVEIS = { facil: 'Fácil', medio: 'Médio', dificil: 'Difícil', impossiv
 
 function escolhaDoBot(t, clube, futuros, nivel, jaEscolhidos = [], rng = Math.random) {
   const opcoes = clube.jogadores.flatMap(j => slotsLivres(t, j.pos).map(i => ({ j, i })));
-  if (nivel === 'facil') return opcoes[Math.floor(rng() * opcoes.length)];
+  // banco: cobre a própria posição se a formação tiver, senão a que menos dói
+  const comCobertura = o => (o.i === RES ? { ...o, cobre: coberturas(t, o.j.pos)[0] } : o);
+  if (nivel === 'facil') return comCobertura(opcoes[Math.floor(rng() * opcoes.length)]);
   // referência: com k vagas abertas na posição, o k-ésimo melhor que ainda pode vir dos próximos clubes
   const vagas = pos => t.slots.filter((p, i) => p === pos && i !== RES && !t.escalacao[i]).length;
   const referencia = pos => futuros.map(c => Math.max(0, ...c.jogadores.filter(j => j.pos === pos).map(j => j.ovr)))
@@ -101,12 +151,21 @@ function escolhaDoBot(t, clube, futuros, nivel, jaEscolhidos = [], rng = Math.ra
   };
   const notas = opcoes.map(nota);
   const melhor = opcoes[notas.indexOf(Math.max(...notas))];
-  if (nivel !== 'impossivel') return melhor;
+  if (nivel !== 'impossivel') return comCobertura(melhor);
   // sabotagem: se alguém pegou um jogador bem melhor que a minha melhor opção, copio e ninguém leva
   const alvo = opcoes.filter(o => o.i !== RES && jaEscolhidos.includes(o.j.id))
     .sort((a, b) => b.j.ovr * peso[b.j.pos] - a.j.ovr * peso[a.j.pos])[0];
   const ganho = o => o.j.ovr * peso[o.j.pos];
-  return alvo && ganho(alvo) - ganho(melhor) > SABOTAGEM ? alvo : melhor;
+  return comCobertura(alvo && ganho(alvo) - ganho(melhor) > SABOTAGEM ? alvo : melhor);
+}
+
+// Bot escolhe a postura comparando-se com os adversários: pior que a média fecha atrás (zebra),
+// melhor que a média abre o jogo (mais gols favorecem quem é melhor).
+function taticaDoBot(t, times) {
+  const meu = forca(t).geral;
+  const outros = times.filter(x => x !== t).map(x => forca(x).geral);
+  const media = outros.reduce((a, b) => a + b, 0) / (outros.length || 1);
+  return meu - media > 1.5 ? 'ofensivo' : meu - media < -1.5 ? 'defensivo' : 'neutro';
 }
 
 // Gols por minuto: chance proporcional a ataque de um vs defesa do outro.
@@ -115,9 +174,12 @@ function simular(a, b, mataMata, rng = Math.random) {
   const fa = forca(a), fb = forca(b);
   // Ataques tendem a ter overall maior que defesas (mercado paga mais por atacante); descontar a
   // diferença média dos dois times deixa ~2,6 gols por jogo e o placar decidido pela diferença entre eles.
+  // Calculado sobre a força crua, sem tática nem bônus, pra que esses dois mexam no placar de verdade.
   const desnivel = (fa.ataque + fb.ataque - fa.defesa - fb.defesa) / 2;
-  const lambda = (atq, def) => 1.3 * Math.exp((atq - def - desnivel) / SENSIBILIDADE);
-  const chances = [lambda(fa.ataque + bonus(a), fb.defesa + bonus(b)), lambda(fb.ataque + bonus(b), fa.defesa + bonus(a))];
+  const atq = (t, f) => f.ataque + bonus(t) + tatica(t).ataque;
+  const def = (t, f) => f.defesa + bonus(t) + tatica(t).defesa;
+  const lambda = (ataque, defesa) => 1.3 * Math.exp((ataque - defesa - desnivel) / SENSIBILIDADE);
+  const chances = [lambda(atq(a, fa), def(b, fb)), lambda(atq(b, fb), def(a, fa))];
   const eventos = [], gols = [0, 0];
   for (let min = 1; min <= 90; min++) {
     [a, b].forEach((t, lado) => {
@@ -129,4 +191,8 @@ function simular(a, b, mataMata, rng = Math.random) {
   return { gols, eventos, penaltis, vencedor: x === y ? null : x > y ? 0 : 1 };
 }
 
-if (typeof module !== 'undefined') module.exports = { FORMACOES, RES, NIVEIS, BONUS_BOT, escolhaDoBot, novoTime, slotsLivres, ovrEfetivo, resolverDuplicados, forca, simular };
+if (typeof module !== 'undefined') module.exports = {
+  FORMACOES, RES, POSICOES, PENALIDADE, TATICAS, NIVEIS, BONUS_BOT, penalidade, coberturas,
+  rngDe, novaSemente, embaralharCom, escolhaDoBot, taticaDoBot, novoTime, slotsLivres,
+  ovrEfetivo, ovrReserva, resolverDuplicados, forca, simular,
+};

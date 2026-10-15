@@ -1,10 +1,14 @@
 # Resenha FC
 
-Draft às cegas dos 12 grandes do Brasil, pra jogar com os amigos no mesmo aparelho (ou contra bots).
+Draft às cegas dos 12 grandes do Brasil, pra jogar com os amigos no mesmo aparelho (ou online, cada um no seu) ou contra bots.
 A roleta sorteia um clube, cada um escolhe um jogador sem ver o dos outros. Repetiu? Ninguém leva.
-No fim os times se enfrentam numa partida simulada pelos overalls.
+Depois escolhe a tática (ataque, neutro ou defesa) e os times se enfrentam numa partida simulada pelos overalls.
 
 **Jogar:** https://matheuscaleiroo.github.io/resenha-fc/
+
+## Jogar online (cada um no seu aparelho)
+No menu, escolha **Online** → **Criar sala** (vira um código de 4 letras) e manda pros amigos, que escolhem **Entrar em sala** com esse código.
+Cada um faz o próprio draft no seu tempo. Quando todo mundo terminar, aparece "X/Y prontos" — quem criou a sala avança pra tática e depois pro jogo, que todo mundo vê.
 
 ## No iPhone (funciona offline)
 1. Abra o link acima no **Safari** (precisa ser o Safari).

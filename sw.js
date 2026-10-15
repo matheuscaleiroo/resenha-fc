@@ -3,7 +3,7 @@
 importScripts('data.js');
 const CACHE = 'resenha';
 const ESSENCIAIS = [
-  './', 'index.html', 'app.js', 'logic.js', 'data.js', 'manifest.webmanifest',
+  './', 'index.html', 'app.js', 'logic.js', 'data.js', 'online.js', 'firebase-config.js', 'manifest.webmanifest',
   'icones/icone-180.png', 'icones/icone-192.png', 'icones/icone-512.png',
   ...CLUBES.map(c => c.escudo),
 ];

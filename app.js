@@ -1,19 +1,20 @@
-// Telas e fluxo (DOM). Regras ficam em logic.js.
+// Telas e fluxo (DOM). Regras ficam em logic.js. Modo online fica em online.js (Firebase) —
+// CLUBE, esc, lerPref e salvarPref são definidos lá (carrega antes deste arquivo).
 const $app = document.getElementById('app');
 const $ = id => document.getElementById(id);
-const CLUBE = Object.fromEntries(CLUBES.map(c => [c.id, c]));
-const esc = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 const sortear = a => a[Math.floor(Math.random() * a.length)];
 const embaralhar = a => a.map(x => [Math.random(), x]).sort((p, q) => p[0] - q[0]).map(p => p[1]);
-let S = {}, relogio;
+let S = {}, SO = {}, relogio, oDesinscrever;
 
 // ---------- preferências (tema, turbo, às cegas) ----------
 const raiz = document.documentElement;
-const lerPref = k => { try { return localStorage.getItem(k); } catch { return null; } };
-const salvarPref = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
 if (lerPref('tema')) raiz.dataset.theme = lerPref('tema');
-const opcoes = { turbo: lerPref('turbo') === '1', cego: lerPref('cego') === '1' };
+const opcoes = { turbo: lerPref('turbo') === '1', cego: lerPref('cego') === '1', velocidade: lerPref('velocidade') || 'normal' };
 function alternarOpcao(k) { opcoes[k] = !opcoes[k]; salvarPref(k, opcoes[k] ? '1' : '0'); }
+// Velocidade da partida: ms de intervalo real por minuto simulado (90 minutos no total).
+const VELOCIDADES = { lenta: 180, normal: 90, rapida: 40 };
+const NOME_VELOCIDADE = { lenta: '🐢 Lenta', normal: '⚽ Normal', rapida: '⚡ Rápida' };
+function escolherVelocidade(v) { S.participantes = lerParticipantes(); opcoes.velocidade = v; salvarPref('velocidade', v); telaSetup(); }
 function alternarTema() {
   const escuro = raiz.dataset.theme ? raiz.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
   raiz.dataset.theme = escuro ? 'light' : 'dark';
@@ -29,6 +30,7 @@ const cartaoClube = id =>
   `<div class="clube"><div class="escudo" style="border-bottom-color:${CLUBE[id].bg}"><img src="${CLUBE[id].escudo}" alt=""></div>${CLUBE[id].nome}</div>`;
 const nomeTime = t => `${t.bot ? '🤖 ' : ''}${esc(t.nome)}`;
 const bonusTxt = t => (t.bot && BONUS_BOT[t.bot] ? ` · <span class="bonus">${BONUS_BOT[t.bot] > 0 ? '+' : ''}${BONUS_BOT[t.bot]} de bônus de bot</span>` : '');
+const taticaTxt = t => ` · ${TATICAS[t.tatica].icone} ${TATICAS[t.tatica].nome}`;
 const humanos = () => S.times.filter(t => !t.bot).length;
 
 function placa(t, oculto) {
@@ -43,8 +45,9 @@ function campo(t, oculto) {
     if (!j) return `<div class="chip vazio"><span class="pos">${t.slots[i]}</span><b>—</b></div>`;
     const fora = i !== RES && j.pos !== t.slots[i];
     const ovr = oculto ? '??' : fora ? `${ovrEfetivo(t, i)} <s>${j.ovr}</s>` : j.ovr;
-    return `<div class="chip${fora ? ' fora' : ''}" ${fora ? `title="${j.pos} jogando de ${t.slots[i]}: −${FORA_DE_POSICAO}"` : ''}>
-      <span class="pos">${t.slots[i]}${fora ? ` ⚠ ${j.pos}` : ''}</span><b>${esc(j.nome)}</b><span class="meta">${mini(j.clube)} ${ovr}</span></div>`;
+    const cobre = i === RES && t.reservaCobre ? ` → cobre ${t.reservaCobre}` : '';
+    return `<div class="chip${fora ? ' fora' : ''}" ${fora ? `title="${j.pos} jogando de ${t.slots[i]}: −${penalidade(j.pos, t.slots[i])}"` : ''}>
+      <span class="pos">${t.slots[i]}${fora ? ` ⚠ ${j.pos}` : ''}${cobre}</span><b>${esc(j.nome)}</b><span class="meta">${mini(j.clube)} ${ovr}</span></div>`;
   };
   let i = 0;
   const linhas = FORMACOES[t.formacao].map(l => `<div class="linha">${l.map(() => chip(i++)).join('')}</div>`);
@@ -54,6 +57,7 @@ function campo(t, oculto) {
 // ---------- menu e setup ----------
 function telaMenu() {
   clearInterval(relogio);
+  if (oDesinscrever) { oDesinscrever(); oDesinscrever = null; }
   $app.innerHTML = `
   <section class="tela">
     <h1 class="titulo">Escolha o modo</h1>
@@ -61,7 +65,12 @@ function telaMenu() {
       <button class="modo" onclick="telaSetup()">
         <span class="selo">12 rodadas · 2 a 6 times · com bots</span>
         <h2>G12</h2>
-        <p>A roleta sorteia um dos 12 grandes. Cada um escolhe um jogador às escondidas. Repetiu? Ninguém leva.</p>
+        <p>A roleta sorteia um dos 12 grandes. Cada um escolhe um jogador às escondidas. Repetiu? Ninguém leva. Todo mundo no mesmo aparelho.</p>
+      </button>
+      <button class="modo" onclick="telaOnlineMenu()">
+        <span class="selo">Cada um no seu aparelho</span>
+        <h2>Online</h2>
+        <p>Mesmo draft, mas cada um joga no seu tempo, de onde estiver. Quando todo mundo terminar, as partidas rolam pra todo mundo ver.</p>
       </button>
       <div class="modo off">
         <span class="selo">Em breve</span>
@@ -107,7 +116,11 @@ function telaSetup() {
     </div>
     <h3>Formação (igual pra todos)</h3>
     <div class="formacoes">${Object.keys(FORMACOES).map(f =>
-      `<button class="btn${f === S.formacao ? '' : ' sec'}" aria-pressed="${f === S.formacao}" onclick="escolherFormacao('${f}')">${f}</button>`).join('')}</div>
+      `<button class="btn${f === S.formacao ? '' : ' sec'}" aria-pressed="${f === S.formacao}" onclick="escolherFormacao('${f}')">${f}</button>`).join('')}
+      <button class="btn sec" onclick="escolherFormacao(sortear(Object.keys(FORMACOES)))" aria-label="Sortear formação">🎲 Sortear</button></div>
+    <h3>Velocidade da partida</h3>
+    <div class="formacoes">${Object.keys(VELOCIDADES).map(v =>
+      `<button class="btn${v === opcoes.velocidade ? '' : ' sec'}" aria-pressed="${v === opcoes.velocidade}" onclick="escolherVelocidade('${v}')">${NOME_VELOCIDADE[v]}</button>`).join('')}</div>
     <h3>Opções</h3>
     <div class="opcoes">
       <label><input type="checkbox" ${opcoes.turbo ? 'checked' : ''} onchange="alternarOpcao('turbo')"> ⚡ Roleta turbo</label>
@@ -178,7 +191,8 @@ function proximaVez() {
     const t = timeDaVez();
     const jaEscolhidos = S.picks.filter(p => p.clube === S.clube).map(p => p.j.id);
     const futuros = S.restantes.filter(id => id !== S.clube).map(id => CLUBE[id]);
-    const { j, i } = escolhaDoBot(t, CLUBE[S.clube], futuros, t.bot, jaEscolhidos);
+    const { j, i, cobre } = escolhaDoBot(t, CLUBE[S.clube], futuros, t.bot, jaEscolhidos);
+    if (i === RES && cobre) t.reservaCobre = cobre;
     registrarEscolha(t, j, i);
   }
   if (S.vez < S.ordem.length) return humanos() > 1 ? telaVez() : telaEscolha();
@@ -198,16 +212,28 @@ function telaVez() {
   </section>`;
 }
 
-function telaEscolha(sel) {
+function telaEscolha(sel, cobreSel) {
   const t = timeDaVez(), c = CLUBE[S.clube], j = c.jogadores[sel], cego = opcoes.cego;
   let acao = '<p class="dica">Toque num jogador pra escalar. Jogador de posição já preenchida só entra como reserva.</p>';
   if (j) {
     const livres = slotsLivres(t, j.pos);
     const tit = livres.find(i => i !== RES), res = livres.find(i => i === RES);
+    let banco = '';
+    if (res !== undefined) {
+      const opcoesCobre = coberturas(t, j.pos);
+      const escolhida = cobreSel && opcoesCobre.includes(cobreSel) ? cobreSel : opcoesCobre[0];
+      banco = `<div class="banco-cobre">
+        <p class="dica">${cego ? 'No banco, cobrindo:' : 'No banco, cobrindo (overall se precisar entrar):'}</p>
+        <div class="cobre-opcoes">${opcoesCobre.map(p => `
+          <button class="chip-cobre${p === escolhida ? ' sel' : ''}" onclick="telaEscolha(${sel}, '${p}')">
+            <span class="pos">${p}</span>${cego ? '' : `<b>${j.ovr - penalidade(j.pos, p)}</b>`}
+          </button>`).join('')}</div>
+        <button class="btn${tit !== undefined ? ' sec' : ''}" onclick="confirmar(${sel}, ${res}, '${escolhida}')">${esc(j.nome)} no banco cobrindo ${escolhida}</button>
+      </div>`;
+    }
     acao = `<div class="acoes">
       ${tit !== undefined ? `<button class="btn" onclick="confirmar(${sel}, ${tit})">Escalar ${esc(j.nome)} (${j.pos})</button>` : ''}
-      ${res !== undefined ? `<button class="btn${tit !== undefined ? ' sec' : ''}" onclick="confirmar(${sel}, ${res})">${esc(j.nome)} no banco</button>` : ''}
-    </div>`;
+    </div>${banco}`;
   }
   $app.innerHTML = `
   <section class="tela">
@@ -224,10 +250,217 @@ function telaEscolha(sel) {
   </section>`;
 }
 
-function confirmar(i, slot) {
-  registrarEscolha(timeDaVez(), CLUBE[S.clube].jogadores[i], slot);
+function confirmar(i, slot, cobre) {
+  const t = timeDaVez();
+  if (slot === RES && cobre) t.reservaCobre = cobre;
+  registrarEscolha(t, CLUBE[S.clube].jogadores[i], slot);
   S.vez++;
   proximaVez();
+}
+
+// ---------- online (salas pelo Firebase, ver online.js) ----------
+function telaOnlineMenu() {
+  if (oDesinscrever) { oDesinscrever(); oDesinscrever = null; }
+  $app.innerHTML = `
+  <section class="tela">
+    <button class="voltar" onclick="telaMenu()">← Menu</button>
+    <h2>Jogar online</h2>
+    <p class="dica">Cada um no seu aparelho. Faça seu draft no seu tempo; quando todo mundo terminar, as partidas começam pra todo mundo ver.</p>
+    <div class="modos">
+      <button class="modo" onclick="telaCriarSala()"><h2>Criar sala</h2><p>Você escolhe a formação e manda o código pros seus amigos.</p></button>
+      <button class="modo" onclick="telaEntrarSala()"><h2>Entrar em sala</h2><p>Alguém já criou? Entra com o código.</p></button>
+    </div>
+  </section>`;
+}
+
+function telaCriarSala() {
+  SO.formacao ??= '4-3-3';
+  $app.innerHTML = `
+  <section class="tela">
+    <button class="voltar" onclick="telaOnlineMenu()">← Online</button>
+    <h2>Criar sala</h2>
+    <div class="nomes"><input id="oNome" maxlength="16" placeholder="Seu nome" value="${esc(lerPref('nomeOnline') || '')}"></div>
+    <h3>Formação (igual pra todos)</h3>
+    <div class="formacoes">${Object.keys(FORMACOES).map(f =>
+      `<button class="btn${f === SO.formacao ? '' : ' sec'}" aria-pressed="${f === SO.formacao}" onclick="SO.formacao='${f}'; telaCriarSala()">${f}</button>`).join('')}
+      <button class="btn sec" onclick="SO.formacao = sortear(Object.keys(FORMACOES)); telaCriarSala()">🎲 Sortear</button></div>
+    <p class="dica" id="oErro"></p>
+    <button class="btn" id="oBtn" onclick="criarSalaClique()">Criar sala</button>
+  </section>`;
+}
+
+async function criarSalaClique() {
+  const nome = $('oNome').value.trim() || 'Jogador';
+  salvarPref('nomeOnline', nome);
+  $('oBtn').disabled = true;
+  try {
+    const codigo = await criarSalaOnline(nome, SO.formacao);
+    entrarNaSalaLocal(codigo);
+  } catch (e) { $('oErro').textContent = '⚠ ' + e.message; $('oBtn').disabled = false; }
+}
+
+function telaEntrarSala() {
+  $app.innerHTML = `
+  <section class="tela">
+    <button class="voltar" onclick="telaOnlineMenu()">← Online</button>
+    <h2>Entrar em sala</h2>
+    <div class="nomes">
+      <input id="oCodigo" maxlength="4" placeholder="Código (ex: ABCD)" style="text-transform:uppercase">
+      <input id="oNome" maxlength="16" placeholder="Seu nome" value="${esc(lerPref('nomeOnline') || '')}">
+    </div>
+    <p class="dica" id="oErro"></p>
+    <button class="btn" id="oBtn" onclick="entrarSalaClique()">Entrar</button>
+  </section>`;
+}
+
+async function entrarSalaClique() {
+  const codigo = $('oCodigo').value.trim().toUpperCase(), nome = $('oNome').value.trim() || 'Jogador';
+  salvarPref('nomeOnline', nome);
+  $('oBtn').disabled = true;
+  try {
+    await entrarSalaOnline(codigo, nome);
+    entrarNaSalaLocal(codigo);
+  } catch (e) { $('oErro').textContent = '⚠ ' + e.message; $('oBtn').disabled = false; }
+}
+
+function entrarNaSalaLocal(codigo) {
+  SO.codigo = codigo;
+  if (oDesinscrever) oDesinscrever();
+  let primeira = true;
+  oDesinscrever = ouvirSala(codigo, sala => {
+    SO.sala = sala;
+    // só re-renderiza por conta própria se a pessoa já estiver na tela de espera (senão
+    // interromperia o draft ou a escolha de tática dela quando outra pessoa termina a sua)
+    if (primeira) { primeira = false; return roteirarOnline(); }
+    if ($app.querySelector('.espera-lista')) roteirarOnline();
+  });
+}
+
+function roteirarOnline() {
+  const sala = SO.sala, eu = sala?.participantes?.[meuId()];
+  if (!sala || !eu) return;
+  if (sala.estado === 'draft' && !eu.pronto) return telaRoletaOnline();
+  if (sala.estado === 'draft') return telaEsperaOnline('Esperando todo mundo terminar o draft…');
+  if (sala.estado === 'tatica' && !eu.bot && !eu.taticaPronto) return telaEscolhaTaticaOnline();
+  if (sala.estado === 'tatica') return telaEsperaOnline('Esperando todo mundo escolher a tática…');
+  if (sala.estado === 'jogos') return iniciarJogosOnline();
+}
+
+function telaEsperaOnline(msg) {
+  const sala = SO.sala, participantes = Object.values(sala.participantes);
+  const checaPronto = p => (sala.estado === 'draft' ? p.pronto : p.taticaPronto);
+  const prontos = participantes.filter(checaPronto).length, todosProntos = prontos === participantes.length;
+  const souAnfitriao = sala.anfitriao === meuId();
+  $app.innerHTML = `
+  <section class="tela centro">
+    <p class="dica">Sala <b>${esc(SO.codigo)}</b> · manda esse código pros seus amigos</p>
+    <h2 class="grande">${prontos}/${participantes.length} prontos</h2>
+    <p>${msg}</p>
+    <ul class="espera-lista">${participantes.map(p => `<li>${checaPronto(p) ? '✅' : '⏳'} ${esc(p.nome)}${p.bot ? ' 🤖' : ''}</li>`).join('')}</ul>
+    ${souAnfitriao ? `
+      <div class="acoes centralizado">
+        <button class="btn" ${todosProntos ? '' : 'disabled'} onclick="avancarFaseOnline()">${sala.estado === 'draft' ? 'Todo mundo pronto! Ir pra tática' : 'Todo mundo pronto! Bola rolando ⚽'}</button>
+      </div>
+      ${sala.estado === 'draft' ? `<p class="dica">Ou adicione um bot pra completar:</p>
+      <div class="acoes centralizado">${Object.keys(NIVEIS).map(n => `<button class="btn sec" onclick="adicionarBotClique('${n}')">+ ${NIVEIS[n]} 🤖</button>`).join('')}</div>` : ''}
+    ` : '<p class="dica">Só quem criou a sala pode avançar pra próxima etapa.</p>'}
+  </section>`;
+}
+
+async function adicionarBotClique(nivel) { await adicionarBotOnline(SO.codigo, nivel); }
+function avancarFaseOnline() { avancarEstadoOnline(SO.codigo, SO.sala.estado === 'draft' ? 'tatica' : 'jogos'); }
+
+function telaRoletaOnline() {
+  const sala = SO.sala;
+  SO.time ??= novoTime(sala.participantes[meuId()].nome, sala.formacao);
+  const rodada = SO.time.escalacao.filter(Boolean).length;
+  if (rodada >= sala.clubesOrdem.length) return finalizarDraftOnline();
+  const clubeId = sala.clubesOrdem[rodada], c = CLUBE[clubeId];
+  $app.innerHTML = `
+  <section class="tela">
+    <div class="rodada"><span>Rodada ${rodada + 1}/${sala.clubesOrdem.length}</span><span>${c.nome}</span></div>
+    <p class="dica">Escolha um jogador do ${c.nome}. Ninguém mais vê sua escolha até todo mundo terminar.</p>
+    <div class="escolha">
+      <div class="lista">${c.jogadores.map((p, i) => `
+        <button class="jogador" onclick="telaEscolhaOnline(${i})" ${slotsLivres(SO.time, p.pos).length ? '' : 'disabled'}>
+          <span class="pos">${p.pos}</span><span class="nome">${esc(p.nome)}</span><span class="ovr">${p.ovr}</span></button>`).join('')}</div>
+      <div>${placa(SO.time)}${campo(SO.time)}</div>
+    </div>
+  </section>`;
+}
+
+function telaEscolhaOnline(sel, cobreSel) {
+  const sala = SO.sala, rodada = SO.time.escalacao.filter(Boolean).length;
+  const clubeId = sala.clubesOrdem[rodada], c = CLUBE[clubeId], j = c.jogadores[sel];
+  const livres = slotsLivres(SO.time, j.pos);
+  const tit = livres.find(i => i !== RES), res = livres.find(i => i === RES);
+  let banco = '';
+  if (res !== undefined) {
+    const opcoesCobre = coberturas(SO.time, j.pos);
+    const escolhida = cobreSel && opcoesCobre.includes(cobreSel) ? cobreSel : opcoesCobre[0];
+    banco = `<div class="banco-cobre">
+      <p class="dica">No banco, cobrindo (overall se precisar entrar):</p>
+      <div class="cobre-opcoes">${opcoesCobre.map(p => `
+        <button class="chip-cobre${p === escolhida ? ' sel' : ''}" onclick="telaEscolhaOnline(${sel}, '${p}')">
+          <span class="pos">${p}</span><b>${j.ovr - penalidade(j.pos, p)}</b></button>`).join('')}</div>
+      <button class="btn${tit !== undefined ? ' sec' : ''}" onclick="confirmarOnline(${sel}, ${res}, '${escolhida}')">${esc(j.nome)} no banco cobrindo ${escolhida}</button>
+    </div>`;
+  }
+  $app.innerHTML = `
+  <section class="tela">
+    <div class="rodada"><span>Rodada ${rodada + 1}/${sala.clubesOrdem.length}</span><span>${c.nome}</span></div>
+    <div class="acoes">${tit !== undefined ? `<button class="btn" onclick="confirmarOnline(${sel}, ${tit})">Escalar ${esc(j.nome)} (${j.pos})</button>` : ''}</div>
+    ${banco}
+    <div class="escolha">
+      <div class="lista">${c.jogadores.map((p, i) => `
+        <button class="jogador${i === sel ? ' sel' : ''}" onclick="telaEscolhaOnline(${i})" ${slotsLivres(SO.time, p.pos).length ? '' : 'disabled'}>
+          <span class="pos">${p.pos}</span><span class="nome">${esc(p.nome)}</span><span class="ovr">${p.ovr}</span></button>`).join('')}</div>
+      <div>${placa(SO.time)}${campo(SO.time)}</div>
+    </div>
+  </section>`;
+}
+
+function confirmarOnline(i, slot, cobre) {
+  const sala = SO.sala, rodada = SO.time.escalacao.filter(Boolean).length;
+  const clubeId = sala.clubesOrdem[rodada];
+  if (slot === RES && cobre) SO.time.reservaCobre = cobre;
+  SO.time.escalacao[slot] = CLUBE[clubeId].jogadores[i];
+  telaRoletaOnline();
+}
+
+async function finalizarDraftOnline() {
+  await salvarEscalacaoOnline(SO.codigo, SO.time);
+  telaEsperaOnline('Você terminou! Esperando os outros…');
+}
+
+function telaEscolhaTaticaOnline() {
+  const sala = SO.sala;
+  const times = Object.entries(sala.participantes).map(([id, p]) => Object.assign(timeDaSala(p, sala.formacao), { _id: id }));
+  resolverDuplicados(times);
+  SO.meuTimeFinal = times.find(t => t._id === meuId());
+  const meu = SO.meuTimeFinal;
+  $app.innerHTML = `
+  <section class="tela">
+    <h2>${esc(meu.nome)}: qual vai ser a postura?</h2>
+    <div class="taticas">${Object.entries(TATICAS).map(([k, v]) => `
+      <button class="tatica-op${meu.tatica === k ? ' sel' : ''}" aria-pressed="${meu.tatica === k}" onclick="SO.meuTimeFinal.tatica='${k}'; telaEscolhaTaticaOnline()">
+        <span class="tatica-icone">${v.icone}</span><b>${v.nome}</b><small>${v.dica}</small></button>`).join('')}</div>
+    ${placa(meu)}${campo(meu)}
+    <button class="btn" onclick="confirmarTaticaOnline()">Confirmar e esperar os outros</button>
+  </section>`;
+}
+
+async function confirmarTaticaOnline() {
+  await salvarTaticaOnline(SO.codigo, SO.meuTimeFinal.tatica);
+  telaEsperaOnline('Esperando todo mundo escolher a tática…');
+}
+
+function iniciarJogosOnline() {
+  const sala = SO.sala;
+  const times = Object.entries(sala.participantes).map(([id, p]) => Object.assign(timeDaSala(p, sala.formacao), { _id: id }));
+  S = { times, online: true, semente: sala.semente };
+  const repetidos = resolverDuplicados(S.times);
+  telaTimes(repetidos);
 }
 
 // ---------- revelação ----------
@@ -273,8 +506,8 @@ function telaRevelaClube() {
   </section>`;
 }
 
-function telaTimes() {
-  const repetidos = resolverDuplicados(S.times);
+function telaTimes(repetidos) {
+  repetidos ??= resolverDuplicados(S.times);
   const temFora = S.times.some(t => t.escalacao.some((j, i) => j && i !== RES && j.pos !== t.slots[i]));
   $app.innerHTML = `
   <section class="tela">
@@ -282,17 +515,61 @@ function telaTimes() {
     ${repetidos.length
       ? `<div class="alerta"><h3>Repetidos: ninguém fica com eles</h3><ul>${repetidos.map(r =>
           `<li><b>${esc(r.jogador.nome)}</b> ${mini(r.jogador.clube)}: ${r.times.map(esc).join(' e ')}</li>`).join('')}</ul>
-          <p class="dica">Quem tinha reserva teve o buraco coberto.${temFora ? ` <span class="tag-fora">⚠ fora de posição</span> joga com −${FORA_DE_POSICAO}.` : ''}</p></div>`
+          <p class="dica">Quem tinha reserva teve o buraco coberto.${temFora ? ` <span class="tag-fora">⚠ fora de posição</span> perde overall — quanto mais estranha a posição, mais perde.` : ''}</p></div>`
       : '<p>Ninguém repetiu jogador. Sintonia zero… ou sorte.</p>'}
     <div class="times">${S.times.map(t => `<div>${placa(t)}${campo(t)}</div>`).join('')}</div>
-    <button class="btn" onclick="telaJogos()">Bola rolando ⚽</button>
+    <button class="btn" onclick="${S.online ? 'telaJogos()' : 'telaTatica()'}">${S.online ? 'Bola rolando ⚽' : 'Escolher tática ⚔️'}</button>
   </section>`;
 }
+
+// ---------- tática ----------
+function telaTatica() {
+  S.times.forEach(t => { if (t.bot) t.tatica = taticaDoBot(t, S.times); });
+  S.humanosTatica = S.times.map((_, i) => i).filter(i => !S.times[i].bot);
+  S.vezTaticaIdx = 0;
+  proximaTatica();
+}
+
+function proximaTatica() {
+  if (S.vezTaticaIdx >= S.humanosTatica.length) return telaJogos();
+  humanos() > 1 ? telaPassaTatica() : telaEscolhaTatica();
+}
+
+function telaPassaTatica() {
+  const t = S.times[S.humanosTatica[S.vezTaticaIdx]];
+  $app.innerHTML = `
+  <section class="tela centro">
+    <p class="dica">Passe o aparelho para</p>
+    <h2 class="grande">${esc(t.nome)}</h2>
+    <p>Hora de escolher a tática. O resto: não olha! 👀</p>
+    <button class="btn" onclick="telaEscolhaTatica()">Sou eu, escolher tática</button>
+  </section>`;
+}
+
+function telaEscolhaTatica() {
+  const t = S.times[S.humanosTatica[S.vezTaticaIdx]];
+  $app.innerHTML = `
+  <section class="tela">
+    <h2>${esc(t.nome)}: qual vai ser a postura?</h2>
+    <div class="taticas">${Object.entries(TATICAS).map(([k, v]) => `
+      <button class="tatica-op${t.tatica === k ? ' sel' : ''}" aria-pressed="${t.tatica === k}" onclick="escolherTatica('${k}')">
+        <span class="tatica-icone">${v.icone}</span><b>${v.nome}</b><small>${v.dica}</small>
+      </button>`).join('')}</div>
+    ${placa(t)}${campo(t)}
+    <button class="btn" onclick="confirmarTatica()">Confirmar e seguir</button>
+  </section>`;
+}
+
+function escolherTatica(k) { S.times[S.humanosTatica[S.vezTaticaIdx]].tatica = k; telaEscolhaTatica(); }
+function confirmarTatica() { S.vezTaticaIdx++; proximaTatica(); }
 
 // ---------- jogos ----------
 function telaJogos() {
   S.jogos = [];
   S.times.forEach((_, a) => S.times.forEach((_, b) => a < b && S.jogos.push([a, b])));
+  // confrontos saem em ordem aleatória, não sempre 0x1, 0x2...; online usa a semente da sala pra
+  // todo mundo embaralhar igual (senão cada aparelho veria um "jogo 1" diferente)
+  S.jogos = S.online ? embaralharCom(S.jogos, rngDe(S.semente)) : embaralhar(S.jogos);
   S.tabela = S.times.map(t => ({ nome: nomeTime(t), p: 0, j: 0, v: 0, e: 0, d: 0, gp: 0, gc: 0 }));
   S.jogoAtual = 0;
   telaPartida();
@@ -306,7 +583,9 @@ function registrar(a, b, [ga, gb]) {
 
 function telaPartida() {
   const [a, b] = S.jogos[S.jogoAtual], times = [S.times[a], S.times[b]];
-  const r = simular(times[0], times[1], S.jogos.length === 1);
+  // online: semente própria por jogo, pra todo aparelho calcular o mesmo placar sem sincronizar gol a gol
+  const rng = S.online ? rngDe(S.semente + S.jogoAtual + 1) : Math.random;
+  const r = simular(times[0], times[1], S.jogos.length === 1, rng);
   registrar(a, b, r.gols);
   S.ultimo = { a, b, r };
   const ultimo = S.jogoAtual === S.jogos.length - 1;
@@ -314,9 +593,9 @@ function telaPartida() {
   <section class="tela">
     <p class="dica">${S.jogos.length > 1 ? `Jogo ${S.jogoAtual + 1} de ${S.jogos.length}` : 'Grande final'}</p>
     <div class="placar">
-      <div class="lado">${nomeTime(times[0])}<small>OVR ${forca(times[0]).geral}${bonusTxt(times[0])}</small></div>
+      <div class="lado">${nomeTime(times[0])}<small>OVR ${forca(times[0]).geral}${bonusTxt(times[0])}${taticaTxt(times[0])}</small></div>
       <div class="gols"><span id="g0">0</span> × <span id="g1">0</span><small id="min">0'</small></div>
-      <div class="lado">${nomeTime(times[1])}<small>OVR ${forca(times[1]).geral}${bonusTxt(times[1])}</small></div>
+      <div class="lado">${nomeTime(times[1])}<small>OVR ${forca(times[1]).geral}${bonusTxt(times[1])}${taticaTxt(times[1])}</small></div>
     </div>
     <div class="acoes" id="fim"><button class="btn sec" id="pular">Pular</button></div>
     <ol class="lances" id="lances"></ol>
@@ -340,7 +619,7 @@ function telaPartida() {
     $('min').textContent = `${m}'`;
     if (m >= 90) fim();
   };
-  relogio = setInterval(tick, 70);
+  relogio = setInterval(tick, VELOCIDADES[opcoes.velocidade] ?? VELOCIDADES.normal);
   $('pular').onclick = () => { while (m < 90) tick(); };
 }
 
@@ -356,8 +635,9 @@ function telaFinal() {
       ${tab.map(t => `<tr><td>${t.nome}</td><td><b>${t.p}</b></td><td>${t.j}</td><td>${t.v}</td><td>${t.e}</td><td>${t.d}</td><td>${t.gp - t.gc}</td></tr>`).join('')}
     </table>` : ''}
     <div class="acoes">
-      <button class="btn" onclick="iniciar(S.participantes)">Revanche</button>
-      <button class="btn sec" onclick="telaMenu()">Menu</button>
+      ${S.online
+        ? `<button class="btn" onclick="telaOnlineMenu()">Nova sala</button><button class="btn sec" onclick="telaMenu()">Menu</button>`
+        : `<button class="btn" onclick="iniciar(S.participantes)">Revanche</button><button class="btn sec" onclick="telaMenu()">Menu</button>`}
     </div>
   </section>`;
 }

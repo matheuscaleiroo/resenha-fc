@@ -144,6 +144,26 @@
   .chip.fora .pos, .tag-fora { color: var(--warn); font-weight: 800; }
   .chip s { color: var(--muted); }
 
+  .banco-cobre { margin: 4px 0 12px; }
+  .cobre-opcoes { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+  .chip-cobre { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 2px solid var(--border);
+    border-radius: 10px; padding: 8px 12px; }
+  .chip-cobre .pos { font-size: .75rem; font-weight: 800; color: var(--muted); }
+  .chip-cobre b { font: 1.2rem 'Bebas Neue', Impact, sans-serif; }
+  .chip-cobre.sel { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+  .chip-cobre.sel .pos { color: var(--accent); }
+
+  .taticas { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 16px 0; }
+  .tatica-op { text-align: left; background: var(--surface); border: 2px solid var(--border); border-radius: 14px; padding: 16px; display: grid; gap: 4px; }
+  .tatica-op:hover { border-color: var(--accent); }
+  .tatica-op.sel { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+  .tatica-icone { font-size: 1.6rem; }
+  .tatica-op b { font-size: 1.1rem; }
+  .tatica-op small { color: var(--muted); }
+
+  .espera-lista { list-style: none; padding: 0; margin: 16px 0; display: grid; gap: 6px; max-width: 360px; margin-inline: auto; }
+  .espera-lista li { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 8px 14px; text-align: left; }
+
   .bonus { color: var(--warn); font-weight: 800; }
   details.dica { margin-bottom: 8px; }
   .centralizado { justify-content: center; }
@@ -180,6 +200,10 @@
 <main id="app"></main>
 <script src="data.js"></script>
 <script src="logic.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="online.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
