@@ -8,12 +8,18 @@ const ESSENCIAIS = [
   ...CLUBES.map(c => c.escudo),
 ];
 
-self.addEventListener('install', e => e.waitUntil(caches.open(CACHE).then(c => c.addAll(ESSENCIAIS)).then(() => self.skipWaiting())));
+// cache: 'no-cache' = sempre confere com o servidor. Sem isso o fetch passava pelo cache HTTP do
+// navegador (GitHub Pages manda max-age=600) e "rede primeiro" entregava o arquivo velho por até 10 min
+// depois de cada atualização (v1.4 apareceu com o menu antigo por isso).
+const daRede = req => (new URL(req.url).origin === location.origin ? new Request(req.url, { cache: 'no-cache' }) : req);
+
+self.addEventListener('install', e => e.waitUntil(caches.open(CACHE)
+  .then(c => c.addAll(ESSENCIAIS.map(u => new Request(u, { cache: 'no-cache' })))).then(() => self.skipWaiting())));
 self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   e.respondWith(
-    fetch(e.request)
+    fetch(daRede(e.request))
       .then(r => {
         const copia = r.clone();
         caches.open(CACHE).then(c => c.put(e.request, copia));   // fontes do Google entram aqui também

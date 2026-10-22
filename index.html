@@ -257,12 +257,14 @@
   <button class="icone" onclick="alternarTema()" aria-label="Alternar tema claro/escuro">◐</button>
 </header>
 <main id="app"></main>
-<script src="data.js"></script>
-<script src="logic.js"></script>
+<!-- ?v=: muda a cada versão. Sem isso o navegador reaproveita o .js velho do cache por até 10 min
+     (GitHub Pages manda max-age=600) mesmo com o index.html novo, e a versão nova não aparece. -->
+<script src="data.js?v=1.4.1"></script>
+<script src="logic.js?v=1.4.1"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-<script src="firebase-config.js"></script>
-<script src="online.js"></script>
-<script src="app.js"></script>
+<script src="firebase-config.js?v=1.4.1"></script>
+<script src="online.js?v=1.4.1"></script>
+<script src="app.js?v=1.4.1"></script>
 </body>
 </html>
