@@ -1,5 +1,6 @@
 // node test.js
 const assert = require('assert');
+const fs = require('fs');
 const L = require('./logic.js');
 
 const j = (id, pos, ovr) => ({ id, nome: id, pos, ovr, clube: 'X' });
@@ -165,5 +166,10 @@ const base = time('T', 't', 75), melhor = time('M', 'm', 85), pior = time('P', '
 assert.equal(L.taticaDoBot(base, [base, igual]), 'neutro');
 assert.equal(L.taticaDoBot(melhor, [melhor, base]), 'ofensivo');
 assert.equal(L.taticaDoBot(pior, [pior, base]), 'defensivo');
+
+// versão: a do index.html (única fonte) tem que ser a primeira do CHANGELOG.md — é dali que o jogo lê as novidades
+const versaoHtml = fs.readFileSync(__dirname + '/index.html', 'utf8').match(/const VERSAO = '([^']+)'/)[1];
+const versaoLog = fs.readFileSync(__dirname + '/CHANGELOG.md', 'utf8').match(/^## (\S+)/m)[1];
+assert.equal(versaoLog, versaoHtml, `CHANGELOG.md começa na ${versaoLog} mas o index.html diz ${versaoHtml}`);
 
 console.log(`ok (forte venceu ${vitorias}/2000; OVR médio dos bots ${JSON.stringify(mediaOvr)}; sabotagens do impossível em 200 drafts: ${sabotagens})`);

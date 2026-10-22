@@ -7,18 +7,79 @@ const embaralhar = a => a.map(x => [Math.random(), x]).sort((p, q) => p[0] - q[0
 let S = {}, SO = {}, relogio, oDesinscrever;
 
 // ---------- preferências (tema, turbo, às cegas) ----------
+// O tema salvo é aplicado já no index.html (antes de tudo carregar), pra não piscar o tema errado.
 const raiz = document.documentElement;
-if (lerPref('tema')) raiz.dataset.theme = lerPref('tema');
 const opcoes = { turbo: lerPref('turbo') === '1', cego: lerPref('cego') === '1', velocidade: lerPref('velocidade') || 'normal' };
 function alternarOpcao(k) { opcoes[k] = !opcoes[k]; salvarPref(k, opcoes[k] ? '1' : '0'); }
 // Velocidade da partida: ms de intervalo real por minuto simulado (90 minutos no total).
 const VELOCIDADES = { lenta: 180, normal: 90, rapida: 40 };
 const NOME_VELOCIDADE = { lenta: '🐢 Lenta', normal: '⚽ Normal', rapida: '⚡ Rápida' };
 function escolherVelocidade(v) { S.participantes = lerParticipantes(); opcoes.velocidade = v; salvarPref('velocidade', v); telaSetup(); }
-function alternarTema() {
-  const escuro = raiz.dataset.theme ? raiz.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
-  raiz.dataset.theme = escuro ? 'light' : 'dark';
-  salvarPref('tema', raiz.dataset.theme);
+// 'sistema' segue o aparelho (sem data-theme); 'light'/'dark' forçam. Dia = claro, noite = escuro.
+const TEMAS = { sistema: '📱 Do aparelho', light: '☀️ Dia', dark: '🌙 Noite' };
+function definirTema(t) {
+  if (t === 'sistema') delete raiz.dataset.theme; else raiz.dataset.theme = t;
+  salvarPref('tema', t === 'sistema' ? '' : t);
+  abrirConfig();
+}
+
+// ---------- janelas (configurações, novidades) e cantos fixos ----------
+$('versao').textContent = `v${VERSAO}`;
+function abrirJanela(html) {
+  fecharJanela();
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="janela-fundo" id="janela" onclick="if (event.target === this) fecharJanela()">
+      <div class="janela" role="dialog" aria-modal="true">
+        <button class="fechar" onclick="fecharJanela()" aria-label="Fechar">✕</button>${html}
+      </div>
+    </div>`);
+  $('janela').querySelector('.janela button:not(.fechar)')?.focus();
+}
+function fecharJanela() { $('janela')?.remove(); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') fecharJanela(); });
+
+function abrirConfig() {
+  const atual = raiz.dataset.theme || 'sistema', noMenu = !!$app.querySelector('.tv');
+  abrirJanela(`
+    <h2>⚙ Configurações</h2>
+    <h3>Tema</h3>
+    <div class="acoes">${Object.entries(TEMAS).map(([k, v]) =>
+      `<button class="btn${k === atual ? '' : ' sec'}" aria-pressed="${k === atual}" onclick="definirTema('${k}')">${v}</button>`).join('')}</div>
+    <h3>Jogo</h3>
+    <div class="acoes">
+      <button class="btn sec" onclick="abrirNovidades()">★ Novidades da v${VERSAO}</button>
+      ${noMenu ? '' : '<button class="btn sec" id="irMenu" onclick="irProMenu()">Voltar ao menu</button>'}
+    </div>
+    <p class="dica">Resenha FC · versão ${VERSAO}</p>`);
+}
+// Fora do menu, sair perde a partida em andamento: pede um segundo toque pra confirmar.
+function irProMenu() {
+  const b = $('irMenu');
+  if (!b.dataset.confirmar) { b.dataset.confirmar = '1'; b.textContent = 'Toque de novo: o jogo atual se perde'; return; }
+  fecharJanela();
+  telaMenu();
+}
+
+// Novidades = a primeira seção do CHANGELOG.md (a versão atual), lida do próprio arquivo pra não
+// manter o texto em dois lugares. Offline ela vem do cache do sw.js; abrindo o index.html direto
+// do disco o navegador não deixa ler, e aí só avisa.
+async function abrirNovidades() {
+  abrirJanela(`<h2>★ Novidades</h2><p class="dica">Carregando…</p>`);
+  let secao;
+  try {
+    const md = await (await fetch(`CHANGELOG.md?v=${VERSAO}`)).text();
+    secao = md.split(/^## /m)[1];
+  } catch {}
+  if (!$('janela')) return;
+  if (!secao) return abrirJanela('<h2>★ Novidades</h2><p>Não consegui ler as novidades agora. Abra o jogo pelo link (com internet) e tente de novo.</p>');
+  const [titulo, ...linhas] = secao.trim().split('\n');
+  const inline = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`(.+?)`/g, '<code>$1</code>');
+  const itens = linhas.filter(l => l.trim().startsWith('- ')).map(l => `<li>${inline(l.trim().slice(2))}</li>`);
+  abrirJanela(`
+    <h2>★ Novidades</h2>
+    <p class="selo">Versão ${esc(titulo.trim())}</p>
+    <ul class="novidades">${itens.join('')}</ul>
+    <div class="acoes"><button class="btn" onclick="fecharJanela()">Bora jogar</button></div>`);
 }
 
 // ---------- pedaços ----------
@@ -42,10 +103,10 @@ function registrarArtilheiro(mapa, time, autor) {
 const artilheirosHtml = mapa => {
   const lista = Object.values(mapa).sort((a, b) => b.gols - a.gols || a.jogador.nome.localeCompare(b.jogador.nome));
   if (!lista.length) return '';
-  return `<h3>Artilheiros ⚽</h3><table>
+  return `<h3>Artilheiros ⚽</h3><div class="tabela"><table>
     <tr><th>Jogador</th><th>Time</th><th>Gols</th></tr>
     ${lista.map(x => `<tr><td>${mini(x.jogador.clube)} ${esc(x.jogador.nome)}</td><td>${nomeTime(x.time)}</td><td><b>${x.gols}</b></td></tr>`).join('')}
-  </table>`;
+  </table></div>`;
 };
 const humanos = () => S.times.filter(t => !t.bot).length;
 
@@ -115,8 +176,8 @@ function telaMenu() {
       <button class="op" onclick="telaOnlineMenu()"><b>ONLINE</b><small>cada um no seu aparelho</small></button>
       <button class="op" disabled><b>EM BREVE</b><small>novos modos vindo aí</small></button>
     </nav>
+    <button class="link-novidades" onclick="abrirNovidades()">★ NOVIDADES DA v${VERSAO}</button>
     <p class="copy">© ${new Date().getFullYear()} RESENHA FC<br>LICENCIADO PELA RESENHA</p>
-    <div class="scan"></div>
   </section>`;
 }
 
@@ -705,11 +766,11 @@ function telaFinalOnline() {
     : tab[0].nome;
   $app.innerHTML = `
   <section class="tela">
-    <div class="campeao"><p class="dica">Campeão da resenha</p><h2 class="grande">🏆 ${campeao}</h2></div>
-    ${sala.jogosOrdem.length > 1 ? `<table>
+    <div class="campeao"><div class="trofeu" aria-hidden="true">🏆</div><p class="dica">Campeão da resenha</p><h2 class="grande">${campeao}</h2></div>
+    ${sala.jogosOrdem.length > 1 ? `<div class="tabela"><table>
       <tr><th>Time</th><th>P</th><th>J</th><th>V</th><th>E</th><th>D</th><th>SG</th></tr>
       ${tab.map(t => `<tr><td>${t.nome}</td><td><b>${t.p}</b></td><td>${t.j}</td><td>${t.v}</td><td>${t.e}</td><td>${t.d}</td><td>${t.gp - t.gc}</td></tr>`).join('')}
-    </table>` : ''}
+    </table></div>` : ''}
     ${artilheirosHtml(artilheiros)}
     <div class="acoes">
       <button class="btn" onclick="telaOnlineMenu()">Nova sala</button>
@@ -882,11 +943,11 @@ function telaFinal() {
   const campeao = S.jogos.length === 1 ? nomeTime(S.times[[a, b][r.vencedor]]) : tab[0].nome; // ponytail: empate total na liga fica com o primeiro da ordenação
   $app.innerHTML = `
   <section class="tela">
-    <div class="campeao"><p class="dica">Campeão da resenha</p><h2 class="grande">🏆 ${campeao}</h2></div>
-    ${S.jogos.length > 1 ? `<table>
+    <div class="campeao"><div class="trofeu" aria-hidden="true">🏆</div><p class="dica">Campeão da resenha</p><h2 class="grande">${campeao}</h2></div>
+    ${S.jogos.length > 1 ? `<div class="tabela"><table>
       <tr><th>Time</th><th>P</th><th>J</th><th>V</th><th>E</th><th>D</th><th>SG</th></tr>
       ${tab.map(t => `<tr><td>${t.nome}</td><td><b>${t.p}</b></td><td>${t.j}</td><td>${t.v}</td><td>${t.e}</td><td>${t.d}</td><td>${t.gp - t.gc}</td></tr>`).join('')}
-    </table>` : ''}
+    </table></div>` : ''}
     ${artilheirosHtml(S.artilheiros)}
     <div class="acoes">
       <button class="btn" onclick="iniciar(S.participantes)">Revanche</button>

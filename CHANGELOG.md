@@ -2,6 +2,13 @@
 
 Resumo do que mudou em cada versão, pra quem joga (não é o histórico técnico — isso fica no `DECISOES.md`).
 
+## 1.4.2 — 2026-10-22
+- **Visual 16-bit no jogo todo**: o gramado virou o fundo de todas as telas, cada tela abre numa janela com moldura de jogo antigo, e títulos e botões usam a fonte pixelada do menu.
+- **Menu em tela cheia**, maior, e a logo sem a pincelada vermelha atrás do "FC".
+- **Configurações (⚙)** no canto de cima: tema Dia (claro), Noite (escuro) ou o do aparelho, novidades da versão e voltar ao menu. A barra vermelha de cima saiu.
+- **Versão no canto da tela** (toque nela pra ver estas novidades), e um atalho "Novidades" no menu.
+- Tudo isso ajustado pro celular.
+
 ## 1.4.1 — 2026-10-22
 - Correção: depois de uma atualização, o jogo podia continuar abrindo a versão antiga por até 10 minutos (o navegador reaproveitava os arquivos velhos). Agora a versão nova aparece assim que você recarrega.
 
