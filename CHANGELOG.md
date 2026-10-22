@@ -2,6 +2,11 @@
 
 Resumo do que mudou em cada versão, pra quem joga (não é o histórico técnico — isso fica no `DECISOES.md`).
 
+## 1.4 — 2026-10-22
+- **Menu novo**, com cara de jogo de futebol 16-bit (inspirado no International Superstar Soccer): gramado, logo com pincelada, placar no canto e as opções lado a lado no centro, com cursor ▶. Dá pra navegar com as setas do teclado e Enter.
+- **Reserva escolhida depois da revelação**: no draft você só manda o jogador pro banco. Na tela da tática escolhe onde ele joga: num buraco que abriu por repetição, no lugar de um titular (que vai pro banco) ou fica no banco mesmo. Cada opção mostra o overall que ele teria ali — posição parecida perde pouco (lateral ↔ zagueiro, meia ↔ atacante), linha no gol é desastre. Vem pré-selecionado o buraco que dói menos; bots usam essa sugestão.
+- **Correção: tática no modo online não selecionava** — clicar em Ofensivo/Defensivo redesenhava a tela e voltava pro Neutro, e era o Neutro que ia pra partida. Agora a escolha fica marcada (com selo "✓ escolhida") e é a que vale.
+
 ## 1.3.1 — 2026-10-15
 - Jonathan Calleri e Luciano (São Paulo) entraram no elenco — o valor de mercado deles é baixo por conta da idade, mas os dois seguem titulares de referência. Ajuste manual, igual já era feito com o Thiago Silva.
 

@@ -51,7 +51,7 @@ const embaralharCom = (a, rng) => a.map(x => [rng(), x]).sort((p, q) => p[0] - q
 
 const novoTime = (nome, formacao) => {
   const slots = [...FORMACOES[formacao].flat(), 'RES'];
-  return { nome, formacao, slots, escalacao: Array(slots.length).fill(null), reservaCobre: null, tatica: 'neutro' };
+  return { nome, formacao, slots, escalacao: Array(slots.length).fill(null), reservaEm: null, tatica: 'neutro' };
 };
 
 const slotsLivres = (t, pos) =>
@@ -62,34 +62,34 @@ const ovrEfetivo = (t, i) => {
   return j.ovr - penalidade(j.pos, t.slots[i]);
 };
 
-// Quanto a reserva valeria entrando na posição que foi escolhida pra ela cobrir.
-const ovrReserva = t => {
-  const j = t.escalacao[RES];
-  return j ? j.ovr - penalidade(j.pos, t.reservaCobre) : null;
-};
-
-// Posições de campo que existem nesta formação, da que menos dói pro jogador até a que mais dói.
-const coberturas = (t, pos) =>
-  [...new Set(t.slots.slice(0, RES))].sort((a, b) => penalidade(pos, a) - penalidade(pos, b) || POSICOES.indexOf(a) - POSICOES.indexOf(b));
-
-// Jogador escolhido por 2+ pessoas sai de todos os times; a reserva cobre um buraco.
+// Jogador escolhido por 2+ pessoas sai de todos os times. A reserva NÃO entra sozinha aqui: onde ela
+// joga é decidido depois, na tela de tática (moverReserva), com reservaPadrao como sugestão.
 function resolverDuplicados(times) {
   const quem = {};
   times.forEach(t => t.escalacao.forEach(j => j && (quem[j.id] ??= { jogador: j, times: [] }).times.push(t.nome)));
   const repetidos = Object.values(quem).filter(q => q.times.length > 1);
   const ids = new Set(repetidos.map(q => q.jogador.id));
-  times.forEach(t => {
-    t.escalacao = t.escalacao.map(j => (j && ids.has(j.id) ? null : j));
-    const reserva = t.escalacao[RES];
-    if (!reserva) return;
-    const buracos = t.slots.map((_, i) => i).filter(i => i !== RES && !t.escalacao[i]);
-    // a posição que a pessoa mandou ela cobrir vem primeiro; se não abriu buraco lá, cobre o que tem
-    const buraco = buracos.find(i => t.slots[i] === t.reservaCobre)
-      ?? buracos.find(i => t.slots[i] === reserva.pos)
-      ?? buracos.sort((x, y) => penalidade(reserva.pos, t.slots[x]) - penalidade(reserva.pos, t.slots[y]))[0];
-    if (buraco !== undefined) { t.escalacao[buraco] = reserva; t.escalacao[RES] = null; }
-  });
+  times.forEach(t => { t.escalacao = t.escalacao.map(j => (j && ids.has(j.id) ? null : j)); });
   return repetidos;
+}
+
+// Reserva em campo: troca o banco com o slot escolhido (quem estava lá, titular ou buraco, vai pro banco).
+// reservaEm = slot onde ela está jogando; RES = ficou no banco; null = ainda não decidido.
+// Trocar duas vezes desfaz, então mudar de ideia é: desfaz a troca anterior e faz a nova.
+function moverReserva(t, slot) {
+  const troca = s => { [t.escalacao[s], t.escalacao[RES]] = [t.escalacao[RES], t.escalacao[s]]; };
+  if (t.reservaEm != null) troca(t.reservaEm);
+  t.reservaEm = t.escalacao[RES] ? slot : RES;   // sem reserva (foi repetida), nada se move
+  troca(t.reservaEm);
+}
+const jogadorReserva = t => t.escalacao[t.reservaEm ?? RES];
+
+// Sugestão (e escolha dos bots): o buraco onde a reserva perde menos overall; sem buraco, fica no banco.
+function reservaPadrao(t) {
+  const r = t.escalacao[RES];
+  const buracos = t.slots.map((_, i) => i).filter(i => i !== RES && !t.escalacao[i]);
+  if (!r || !buracos.length) return RES;
+  return buracos.sort((x, y) => penalidade(r.pos, t.slots[x]) - penalidade(r.pos, t.slots[y]) || x - y)[0];
 }
 
 function forca(t) {
@@ -130,9 +130,7 @@ const NIVEIS = { facil: 'Fácil', medio: 'Médio', dificil: 'Difícil', impossiv
 
 function escolhaDoBot(t, clube, futuros, nivel, jaEscolhidos = [], rng = Math.random) {
   const opcoes = clube.jogadores.flatMap(j => slotsLivres(t, j.pos).map(i => ({ j, i })));
-  // banco: cobre a própria posição se a formação tiver, senão a que menos dói
-  const comCobertura = o => (o.i === RES ? { ...o, cobre: coberturas(t, o.j.pos)[0] } : o);
-  if (nivel === 'facil') return comCobertura(opcoes[Math.floor(rng() * opcoes.length)]);
+  if (nivel === 'facil') return opcoes[Math.floor(rng() * opcoes.length)];
   // referência: com k vagas abertas na posição, o k-ésimo melhor que ainda pode vir dos próximos clubes
   const vagas = pos => t.slots.filter((p, i) => p === pos && i !== RES && !t.escalacao[i]).length;
   const referencia = pos => futuros.map(c => Math.max(0, ...c.jogadores.filter(j => j.pos === pos).map(j => j.ovr)))
@@ -151,12 +149,12 @@ function escolhaDoBot(t, clube, futuros, nivel, jaEscolhidos = [], rng = Math.ra
   };
   const notas = opcoes.map(nota);
   const melhor = opcoes[notas.indexOf(Math.max(...notas))];
-  if (nivel !== 'impossivel') return comCobertura(melhor);
+  if (nivel !== 'impossivel') return melhor;
   // sabotagem: se alguém pegou um jogador bem melhor que a minha melhor opção, copio e ninguém leva
   const alvo = opcoes.filter(o => o.i !== RES && jaEscolhidos.includes(o.j.id))
     .sort((a, b) => b.j.ovr * peso[b.j.pos] - a.j.ovr * peso[a.j.pos])[0];
   const ganho = o => o.j.ovr * peso[o.j.pos];
-  return comCobertura(alvo && ganho(alvo) - ganho(melhor) > SABOTAGEM ? alvo : melhor);
+  return alvo && ganho(alvo) - ganho(melhor) > SABOTAGEM ? alvo : melhor;
 }
 
 // Bot escolhe a postura comparando-se com os adversários: pior que a média fecha atrás (zebra),
@@ -192,7 +190,7 @@ function simular(a, b, mataMata, rng = Math.random) {
 }
 
 if (typeof module !== 'undefined') module.exports = {
-  FORMACOES, RES, POSICOES, PENALIDADE, TATICAS, NIVEIS, BONUS_BOT, penalidade, coberturas,
+  FORMACOES, RES, POSICOES, PENALIDADE, TATICAS, NIVEIS, BONUS_BOT, penalidade,
   rngDe, novaSemente, embaralharCom, escolhaDoBot, taticaDoBot, novoTime, slotsLivres,
-  ovrEfetivo, ovrReserva, resolverDuplicados, forca, simular,
+  ovrEfetivo, resolverDuplicados, moverReserva, jogadorReserva, reservaPadrao, forca, simular,
 };

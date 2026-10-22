@@ -16,39 +16,55 @@ for (const [nome, linhas] of Object.entries(L.FORMACOES)) {
   assert.equal(L.novoTime('x', nome).slots[L.RES], 'RES', nome);
 }
 
-// repetido sai dos dois times e a reserva (ATA) cobre o buraco de MEI, com penalidade da matriz
+// repetido sai dos dois times; a reserva NÃO entra sozinha (fica no banco até moverReserva)
 const A = time('A', 'a', 75), B = time('B', 'b', 75);
 const meiA = A.slots.indexOf('MEI'), meiB = B.slots.lastIndexOf('MEI');
 const craque = j('craque', 'MEI', 90);
 A.escalacao[meiA] = craque; B.escalacao[meiB] = craque;
 const rep = L.resolverDuplicados([A, B]);
 assert.deepStrictEqual(rep.map(r => r.times), [['A', 'B']]);
+assert.equal(A.escalacao[meiA], null);
+assert.equal(A.escalacao[L.RES].id, 'a11');
+// sugestão: o único buraco; entrando lá, a reserva (ATA) joga de MEI com a penalidade da matriz
+assert.equal(L.reservaPadrao(A), meiA);
+L.moverReserva(A, L.reservaPadrao(A));
 assert.equal(A.escalacao[meiA].id, 'a11');
 assert.equal(A.escalacao[L.RES], null);
 assert.equal(L.ovrEfetivo(A, meiA), 75 - L.penalidade('ATA', 'MEI'));
-assert.equal(B.escalacao[meiB].id, 'b11');
+assert.equal(L.jogadorReserva(A).id, 'a11');
 
-// reservaCobre: com dois buracos abertos, a reserva vai pro que a pessoa escolheu, mesmo contra o
-// que o fallback automático escolheria por conta própria (aqui o fallback preferiria LAT, não ZAG,
-// porque dói menos pra um MEI — ver PENALIDADE.MEI).
-const C = time('C', 'c', 75), D = time('D', 'd', 75);
-C.escalacao[C.slots.indexOf('RES')] = j('cres', 'MEI', 75);           // reserva é MEI, não ATA
-const craqueZ = j('craqueZ', 'ZAG', 90), craqueL = j('craqueL', 'LAT', 90);
-const zagC = C.slots.indexOf('ZAG'), zagD = D.slots.lastIndexOf('ZAG');
-const latC = C.slots.indexOf('LAT'), latD = D.slots.lastIndexOf('LAT');
-C.escalacao[zagC] = craqueZ; D.escalacao[zagD] = craqueZ;
-C.escalacao[latC] = craqueL; D.escalacao[latD] = craqueL;
-assert(L.penalidade('MEI', 'LAT') < L.penalidade('MEI', 'ZAG'), 'premissa do teste: fallback preferiria LAT');
-C.reservaCobre = 'ZAG';
-L.resolverDuplicados([C, D]);
-assert.equal(C.escalacao[zagC]?.id, 'cres', 'reservaCobre não foi respeitado (foi pro que dói menos, não pro escolhido)');
-assert.equal(C.escalacao[latC], null, 'buraco de LAT devia continuar vazio');
-assert.equal(L.ovrEfetivo(C, zagC), 75 - L.penalidade('MEI', 'ZAG'));
+// moverReserva: pode trocar de ideia (desfaz a troca anterior) e pode entrar no lugar de um titular,
+// que vai pro banco. Banco (RES) devolve tudo como estava.
+const C = time('C', 'c', 75);
+C.escalacao[L.RES] = j('cres', 'LAT', 80);
+const original = C.escalacao.map(x => x.id);
+assert.equal(L.reservaPadrao(C), L.RES, 'sem buraco, sugestão é ficar no banco');
+const zagC = C.slots.indexOf('ZAG'), golC = C.slots.indexOf('GOL');
+L.moverReserva(C, zagC);
+assert.equal(C.escalacao[zagC].id, 'cres');
+assert.equal(C.escalacao[L.RES].id, original[zagC], 'titular trocado devia ir pro banco');
+assert.equal(L.ovrEfetivo(C, zagC), 80 - L.penalidade('LAT', 'ZAG'));
+L.moverReserva(C, golC);
+assert.equal(C.escalacao[zagC].id, original[zagC], 'trocar de ideia devia devolver o zagueiro');
+assert.equal(C.escalacao[golC].id, 'cres');
+assert(L.ovrEfetivo(C, golC) < L.ovrEfetivo(C, zagC) - 15, 'lateral no gol devia doer muito mais que na zaga');
+L.moverReserva(C, L.RES);
+assert.deepStrictEqual(C.escalacao.map(x => x.id), original, 'voltar pro banco devia desfazer tudo');
 
-// coberturas: ordenadas da que dói menos pra que dói mais (matriz é a fonte da verdade)
-const ordemLAT = L.coberturas(L.novoTime('x', '4-3-3'), 'LAT');
-assert.equal(ordemLAT[0], 'LAT');
-assert.deepStrictEqual([...ordemLAT].sort((a, b) => L.penalidade('LAT', a) - L.penalidade('LAT', b)), ordemLAT);
+// sugestão com dois buracos: vai pro que dói menos pra posição dela (MEI: LAT dói menos que ZAG)
+const E = time('E', 'e', 75);
+E.escalacao[L.RES] = j('eres', 'MEI', 75);
+const zagE = E.slots.indexOf('ZAG'), latE = E.slots.indexOf('LAT');
+E.escalacao[zagE] = null; E.escalacao[latE] = null;
+assert(L.penalidade('MEI', 'LAT') < L.penalidade('MEI', 'ZAG'));
+assert.equal(L.reservaPadrao(E), latE);
+
+// reserva repetida (null no banco): moverReserva não mexe em nada
+const F = time('F', 'f', 75);
+F.escalacao[L.RES] = null;
+L.moverReserva(F, 0);
+assert.equal(F.reservaEm, L.RES);
+assert.equal(F.escalacao[0].id, 'f0');
 
 // tática: ofensivo tira de defesa e põe em ataque (saldo zero), defensivo o contrário, neutro não altera
 for (const [nome, sinal] of [['ofensivo', 1], ['defensivo', -1], ['neutro', 0]]) {
@@ -96,7 +112,6 @@ const { t: timeOriginal, picks } = O.draftarBotOnline({ nome: 'Sala', bot: 'difi
 assert.equal(Object.keys(picks).length, clubesOnline.length, 'uma pick por rodada/clube');
 const reconstruido = O.timeDaSala({ nome: 'Sala', picks, tatica: 'ofensivo' }, '4-3-3');
 assert.deepStrictEqual(reconstruido.escalacao.map(j => j?.id), timeOriginal.escalacao.map(j => j?.id));
-assert.equal(reconstruido.reservaCobre, timeOriginal.reservaCobre);
 assert.equal(reconstruido.tatica, 'ofensivo');
 
 // draftarBotOnline: preenche os 12 slots sem ver ninguém (sem sabotagem possível, já que jaEscolhidos é sempre [])

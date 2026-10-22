@@ -22,15 +22,12 @@ const gerarCodigo = () => Array.from({ length: 4 }, () => ALFABETO_CODIGO[Math.f
 
 const jogadorPorId = id => CLUBE[id.split(':')[0]].jogadores.find(j => j.id === id);
 
-// Reconstrói um time a partir do que veio da sala: cada "pick" é {jogador, slot, cobre}, uma
+// Reconstrói um time a partir do que veio da sala: cada "pick" é {jogador, slot}, uma
 // entrada por rodada de draft. data.js é igual no aparelho de todo mundo, então o id basta —
 // mandar o objeto do jogador inteiro pela rede seria redundante.
 function timeDaSala(p, formacao) {
   const t = novoTime(p.nome, formacao);
-  Object.values(p.picks || {}).forEach(pick => {
-    t.escalacao[pick.slot] = jogadorPorId(pick.jogador);
-    if (pick.slot === RES) t.reservaCobre = pick.cobre || null;
-  });
+  Object.values(p.picks || {}).forEach(pick => { t.escalacao[pick.slot] = jogadorPorId(pick.jogador); });
   t.tatica = p.tatica || 'neutro';
   t.bot = p.bot || null;
   return t;
@@ -45,10 +42,9 @@ function draftarBotOnline(p, clubesOrdem, formacao) {
   const picks = {};
   clubesOrdem.forEach((clubeId, r) => {
     const futuros = clubesOrdem.slice(r + 1).map(id => CLUBE[id]);
-    const { j, i, cobre } = escolhaDoBot(t, CLUBE[clubeId], futuros, p.bot, [], Math.random);
+    const { j, i } = escolhaDoBot(t, CLUBE[clubeId], futuros, p.bot, [], Math.random);
     t.escalacao[i] = j;
-    if (i === RES && cobre) t.reservaCobre = cobre;
-    picks[r] = { jogador: j.id, slot: i, cobre: i === RES ? (cobre || null) : null };
+    picks[r] = { jogador: j.id, slot: i };
   });
   return { t, picks };
 }
@@ -125,9 +121,9 @@ function ouvirSala(codigo, cb) {
 
 const iniciarDraftOnline = codigo => conectarFirebase().ref(`salas/${codigo}/estado`).set('draft');
 
-function registrarPickOnline(codigo, rodada, slot, jogadorId, cobre) {
+function registrarPickOnline(codigo, rodada, slot, jogadorId) {
   return conectarFirebase().ref(`salas/${codigo}/participantes/${meuId()}/picks/${rodada}`)
-    .set({ jogador: jogadorId, slot, cobre: cobre ?? null });
+    .set({ jogador: jogadorId, slot });
 }
 
 const avancarRodadaOnline = (codigo, rodada) => conectarFirebase().ref(`salas/${codigo}/rodadaAtual`).set(rodada);
@@ -139,8 +135,9 @@ const avancarRevelacaoOnline = (codigo, i) => conectarFirebase().ref(`salas/${co
 
 const iniciarTaticaOnline = codigo => conectarFirebase().ref(`salas/${codigo}/estado`).set('tatica');
 
-const salvarTaticaOnline = (codigo, tatica) =>
-  conectarFirebase().ref(`salas/${codigo}/participantes/${meuId()}`).update({ tatica, taticaPronto: true });
+// reservaEm: slot onde a reserva joga (RES = banco). Sem isso gravado, vale reservaPadrao (bots).
+const salvarTaticaOnline = (codigo, tatica, reservaEm) =>
+  conectarFirebase().ref(`salas/${codigo}/participantes/${meuId()}`).update({ tatica, reservaEm, taticaPronto: true });
 
 const iniciarJogosOnline = (codigo, jogosOrdem) =>
   conectarFirebase().ref(`salas/${codigo}`).update({ estado: 'jogos', jogosOrdem, jogoAtual: 0 });
