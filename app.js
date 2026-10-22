@@ -33,7 +33,7 @@ function abrirJanela(html) {
         <button class="fechar" onclick="fecharJanela()" aria-label="Fechar">✕</button>${html}
       </div>
     </div>`);
-  $('janela').querySelector('.janela button:not(.fechar)')?.focus();
+  $('janela').querySelector('.janela button:not(.fechar)')?.focus({ preventScroll: true });   // sem rolar: janela abre no topo
 }
 function fecharJanela() { $('janela')?.remove(); }
 document.addEventListener('keydown', e => { if (e.key === 'Escape') fecharJanela(); });
@@ -47,7 +47,7 @@ function abrirConfig() {
       `<button class="btn${k === atual ? '' : ' sec'}" aria-pressed="${k === atual}" onclick="definirTema('${k}')">${v}</button>`).join('')}</div>
     <h3>Jogo</h3>
     <div class="acoes">
-      <button class="btn sec" onclick="abrirNovidades()">★ Novidades da v${VERSAO}</button>
+      <button class="btn sec" onclick="abrirNovidades()">★ Novidades da ${serie(VERSAO)}</button>
       ${noMenu ? '' : '<button class="btn sec" id="irMenu" onclick="irProMenu()">Voltar ao menu</button>'}
     </div>
     <p class="dica">Resenha FC · versão ${VERSAO}</p>`);
@@ -60,25 +60,33 @@ function irProMenu() {
   telaMenu();
 }
 
-// Novidades = a primeira seção do CHANGELOG.md (a versão atual), lida do próprio arquivo pra não
-// manter o texto em dois lugares. Offline ela vem do cache do sw.js; abrindo o index.html direto
-// do disco o navegador não deixa ler, e aí só avisa.
+// Novidades = todas as seções do CHANGELOG.md da série atual (1.4, 1.4.1, 1.4.2... quando a versão é
+// 1.4.x), da mais nova pra mais antiga, lidas do próprio arquivo pra não manter o texto em dois
+// lugares. Offline vem do cache do sw.js; abrindo o index.html direto do disco o navegador não deixa
+// ler, e aí só avisa.
+const serie = v => v.split('.').slice(0, 2).join('.');
 async function abrirNovidades() {
   abrirJanela(`<h2>★ Novidades</h2><p class="dica">Carregando…</p>`);
-  let secao;
+  let secoes = [];
   try {
     const md = await (await fetch(`CHANGELOG.md?v=${VERSAO}`)).text();
-    secao = md.split(/^## /m)[1];
+    secoes = md.split(/^## /m).slice(1).map(s => s.trim().split('\n'))
+      .filter(([titulo]) => serie(titulo.split(/\s/)[0]) === serie(VERSAO));
   } catch {}
   if (!$('janela')) return;
-  if (!secao) return abrirJanela('<h2>★ Novidades</h2><p>Não consegui ler as novidades agora. Abra o jogo pelo link (com internet) e tente de novo.</p>');
-  const [titulo, ...linhas] = secao.trim().split('\n');
+  if (!secoes.length) return abrirJanela('<h2>★ Novidades</h2><p>Não consegui ler as novidades agora. Abra o jogo pelo link (com internet) e tente de novo.</p>');
   const inline = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`(.+?)`/g, '<code>$1</code>');
-  const itens = linhas.filter(l => l.trim().startsWith('- ')).map(l => `<li>${inline(l.trim().slice(2))}</li>`);
+  const versao = ([titulo, ...linhas], k) => {
+    const [num, data] = titulo.split(/\s+—\s+/);
+    const itens = linhas.filter(l => l.trim().startsWith('- ')).map(l => `<li>${inline(l.trim().slice(2))}</li>`);
+    return `<section class="nova-versao">
+      <h3>v${esc(num)}${k === 0 ? ' <span class="marca">atual</span>' : ''} <small>${esc(data || '')}</small></h3>
+      <ul class="novidades">${itens.join('')}</ul></section>`;
+  };
   abrirJanela(`
-    <h2>★ Novidades</h2>
-    <p class="selo">Versão ${esc(titulo.trim())}</p>
-    <ul class="novidades">${itens.join('')}</ul>
+    <h2>★ Novidades da ${serie(VERSAO)}</h2>
+    <p class="dica">Todas as atualizações da versão ${serie(VERSAO)}, da mais nova pra mais antiga.</p>
+    ${secoes.map(versao).join('')}
     <div class="acoes"><button class="btn" onclick="fecharJanela()">Bora jogar</button></div>`);
 }
 
@@ -172,11 +180,10 @@ function telaMenu() {
     <h1 class="logo-retro"><span class="l1">RESENHA</span><span class="l2">FC</span></h1>
     <p class="pisca">ESCOLHA O MODO</p>
     <nav class="menu-opcoes" aria-label="Modos de jogo">
-      <button class="op ativo" onclick="telaSetup()"><b>G12</b><small>12 grandes · mesmo aparelho · bots</small></button>
-      <button class="op" onclick="telaOnlineMenu()"><b>ONLINE</b><small>cada um no seu aparelho</small></button>
+      <button class="op ativo" onclick="telaG12()"><b>G12</b><small>12 grandes · local ou online</small></button>
       <button class="op" disabled><b>EM BREVE</b><small>novos modos vindo aí</small></button>
     </nav>
-    <button class="link-novidades" onclick="abrirNovidades()">★ NOVIDADES DA v${VERSAO}</button>
+    <button class="link-novidades" onclick="abrirNovidades()">★ NOVIDADES DA ${serie(VERSAO)}</button>
     <p class="copy">© ${new Date().getFullYear()} RESENHA FC<br>LICENCIADO PELA RESENHA</p>
   </section>`;
 }
@@ -199,6 +206,21 @@ document.addEventListener('keydown', e => {
   ops[(atual + passo + ops.length) % ops.length].focus();
 });
 
+// G12: o único modo por enquanto. Antes de tudo pergunta onde vai ser: no mesmo aparelho ou online.
+function telaG12() {
+  if (oDesinscrever) { oDesinscrever(); oDesinscrever = null; }
+  $app.innerHTML = `
+  <section class="tela">
+    <button class="voltar" onclick="telaMenu()">← Menu</button>
+    <h2>G12 · Onde vai ser a resenha?</h2>
+    <p class="dica">A roleta sorteia um dos 12 grandes, cada um escolhe um jogador às escondidas. Repetiu? Ninguém leva.</p>
+    <div class="modos">
+      <button class="modo" onclick="telaSetup()"><h2>📱 Local</h2><p>Todo mundo no mesmo aparelho, passando de mão em mão. Dá pra jogar contra bots.</p></button>
+      <button class="modo" onclick="telaOnlineMenu()"><h2>🌐 Online</h2><p>Cada um no seu aparelho, sincronizado: mesma roleta, mesma revelação e mesmos jogos pra todo mundo.</p></button>
+    </div>
+  </section>`;
+}
+
 function lerParticipantes() {
   return [...document.querySelectorAll('.participante')].map((el, i) => {
     const nivel = el.querySelector('select')?.value || null;
@@ -212,7 +234,7 @@ function telaSetup() {
   const ps = S.participantes, cheio = ps.length >= 6;
   $app.innerHTML = `
   <section class="tela">
-    <button class="voltar" onclick="telaMenu()">← Menu</button>
+    <button class="voltar" onclick="telaG12()">← G12</button>
     <h2>G12 · Quem vai jogar?</h2>
     <p class="dica">Todo mundo no mesmo aparelho: na sua vez, os outros não olham. Bots escolhem sozinhos.</p>
     <details class="dica"><summary>Como os bots jogam</summary>
@@ -370,8 +392,8 @@ function telaOnlineMenu() {
   if (oDesinscrever) { oDesinscrever(); oDesinscrever = null; }
   $app.innerHTML = `
   <section class="tela">
-    <button class="voltar" onclick="telaMenu()">← Menu</button>
-    <h2>Jogar online</h2>
+    <button class="voltar" onclick="telaG12()">← G12</button>
+    <h2>G12 · Jogar online</h2>
     <p class="dica">Cada um no seu aparelho, mas sincronizado: todo mundo vê a mesma roleta, a mesma revelação e os mesmos jogos, no mesmo momento.</p>
     <div class="modos">
       <button class="modo" onclick="telaCriarSala()"><h2>Criar sala</h2><p>Você escolhe a formação e as opções, e manda o código pros seus amigos.</p></button>

@@ -93,6 +93,9 @@
   .janela h2 { padding-right: 36px; }
   .janela .acoes .btn { flex: 1 1 auto; }
   .novidades { padding-left: 1.2em; margin: 0; display: grid; gap: 10px; }
+  .nova-versao + .nova-versao { margin-top: 8px; padding-top: 4px; border-top: 3px dashed var(--border); }
+  .nova-versao h3 small { font: .8rem Inter, sans-serif; color: var(--muted); }
+  .nova-versao .marca { padding: 2px 6px; font: .45rem var(--pixel); vertical-align: 2px; background: var(--accent); color: var(--on-accent); }
   .novidades li::marker { content: '▶  '; color: var(--accent); font-size: .7em; }
 
   /* ---------- menu: tela de título, ocupando a tela toda ---------- */
@@ -293,7 +296,7 @@
   // Versão do jogo: único lugar onde ela é escrita. Aparece no canto da tela e vai no ?v= de cada
   // script — sem isso o navegador reaproveita o .js velho do cache por até 10 min (GitHub Pages manda
   // max-age=600) mesmo com este index.html novo. test.js confere que bate com o topo do CHANGELOG.md.
-  const VERSAO = '1.4.2';
+  const VERSAO = '1.4.3';
   try { const t = localStorage.getItem('tema'); if (t) document.documentElement.dataset.theme = t; } catch {}
   ['data.js', 'logic.js', 'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',
    'https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js', 'firebase-config.js', 'online.js', 'app.js']

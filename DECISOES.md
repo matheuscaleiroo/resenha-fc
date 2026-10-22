@@ -148,3 +148,11 @@ ode.exe' test.js` (PowerShell). Atualizar elencos e escudos: `node tools/atualiz
 - `node test.js` (inclui o teste novo de versão × CHANGELOG).
 - Puppeteer-core com o Chrome instalado: 14 telas (menu, configurações dentro e fora do menu, novidades, setup, roleta, escolha, suspense, revelação, times, tática, partida, campeão, menu online) fotografadas em 390px (emulação de celular com toque) e 1280px, nos temas Dia e Noite, sem nenhum erro de JS.
 - **Não testado**: telas do online além do menu (lobby, espera, revelação e partida online usam as mesmas classes, mas não fotografei). iPhone/Safari de verdade. Novidades offline (o service worker não instala no Chrome automatizado desta máquina, ver decisão 28).
+
+## Sessão 9: v1.4.3 — novidades da série toda, G12 pergunta local/online
+33. **Novidades = todas as seções do CHANGELOG.md da série atual** (mesmos dois primeiros números da `VERSAO`: na 1.4.3 aparecem 1.4.3, 1.4.2, 1.4.1 e 1.4), da mais nova pra mais antiga, com a atual marcada. Quando vier a 1.5, a janela passa a mostrar só as 1.5.x, sem mexer no código. A janela abre no topo (`focus({ preventScroll: true })`; antes o foco no botão do fim rolava até lá).
+34. **Menu com um modo só, o G12** (mais o "Em breve"). `telaG12()` pergunta Local (→ `telaSetup`) ou Online (→ `telaOnlineMenu`), e o "voltar" dessas duas telas leva pra essa escolha, não pro menu. Mantive o "Em breve" porque ele anuncia modos futuros, não é um modo.
+
+## Verificado (sessão 9)
+- `node test.js`.
+- Puppeteer em 390px (Dia e Noite) e 1280px: menu sem ONLINE; G12 → Local/Online; Local → setup; Online → criar/entrar sala; "← G12" e "← Menu" voltam certo; novidades listam v1.4.3, v1.4.2, v1.4.1, v1.4 nessa ordem; sem erros de JS.

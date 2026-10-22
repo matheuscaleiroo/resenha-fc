@@ -2,6 +2,10 @@
 
 Resumo do que mudou em cada versão, pra quem joga (não é o histórico técnico — isso fica no `DECISOES.md`).
 
+## 1.4.3 — 2026-10-22
+- **Novidades mostram a 1.4 inteira**: a janela de novidades agora lista todas as atualizações da 1.4 (1.4, 1.4.1, 1.4.2, 1.4.3), da mais nova pra mais antiga, em vez de só a última.
+- **Menu com um modo só, o G12**: ao entrar nele, o jogo pergunta se vai ser **Local** (todo mundo no mesmo aparelho, com bots) ou **Online** (cada um no seu). O botão Online saiu do menu principal.
+
 ## 1.4.2 — 2026-10-22
 - **Visual 16-bit no jogo todo**: o gramado virou o fundo de todas as telas, cada tela abre numa janela com moldura de jogo antigo, e títulos e botões usam a fonte pixelada do menu.
 - **Menu em tela cheia**, maior, e a logo sem a pincelada vermelha atrás do "FC".
