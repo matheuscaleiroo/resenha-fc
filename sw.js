@@ -1,11 +1,11 @@
 // Offline: tenta a rede (sempre pega a versão nova), sem internet usa o cache.
 // ponytail: rede primeiro deixa a abertura lenta em sinal ruim; se incomodar, trocar por cache primeiro + atualizar em segundo plano.
-importScripts('data.js');
+importScripts('data.js', 'data-big6.js');
 const CACHE = 'resenha';
 const ESSENCIAIS = [
-  './', 'index.html', 'app.js', 'logic.js', 'data.js', 'online.js', 'firebase-config.js', 'manifest.webmanifest', 'CHANGELOG.md',
+  './', 'index.html', 'app.js', 'logic.js', 'data.js', 'data-big6.js', 'online.js', 'firebase-config.js', 'manifest.webmanifest', 'CHANGELOG.md',
   'icones/icone-180.png', 'icones/icone-192.png', 'icones/icone-512.png',
-  ...CLUBES.map(c => c.escudo),
+  ...[...CLUBES, ...CLUBES_BIG6].map(c => c.escudo),
 ];
 
 // cache: 'no-cache' = sempre confere com o servidor. Sem isso o fetch passava pelo cache HTTP do

@@ -9,7 +9,8 @@ const FORMACOES = {
   '5-3-2': [['ATA', 'ATA'], ['MEI', 'MEI', 'MEI'], ['LAT', 'ZAG', 'ZAG', 'ZAG', 'LAT'], ['GOL']],
 };
 const RES = 11;
-const VAZIO = 50;              // "overall" de uma posição sem ninguém (jogar com 10 dói, mas não é W.O.)
+const VAZIO = 50;              // "overall" de uma posição sem ninguém (jogar com 10 dói, mas não é W.O.).
+                               // É o do G12; cada modo pode ter o seu em t.vazio (ver MODOS em online.js).
 const SENSIBILIDADE = 10;      // ajuste fino: menor = overall pesa mais no placar
 const PESO_GOL = { GOL: 0.02, LAT: 0.6, ZAG: 0.5, MEI: 2, ATA: 5 };
 const POSICOES = ['GOL', 'LAT', 'ZAG', 'MEI', 'ATA'];
@@ -94,7 +95,7 @@ function reservaPadrao(t) {
 
 function forca(t) {
   const media = a => a.reduce((x, y) => x + y, 0) / a.length;
-  const v = i => (t.escalacao[i] ? ovrEfetivo(t, i) : VAZIO);
+  const v = i => (t.escalacao[i] ? ovrEfetivo(t, i) : t.vazio ?? VAZIO);
   const idx = pos => t.slots.map((p, i) => (pos.includes(p) && i !== RES ? i : -1)).filter(i => i >= 0);
   const goleiro = idx(['GOL']).map(v);
   return {
@@ -128,13 +129,17 @@ const SABOTAGEM = 0.5;         // impossível copia quando o seu jogador vale is
 const BONUS_BOT = { facil: -1, medio: 1, dificil: 3, impossivel: 6 };  // vs humano realista: bot vence ~11% / 37% / 58% / 80%
 const NIVEIS = { facil: 'Fácil', medio: 'Médio', dificil: 'Difícil', impossivel: 'Impossível' };
 
-function escolhaDoBot(t, clube, futuros, nivel, jaEscolhidos = [], rng = Math.random) {
+// porClube: quantos jogadores cada clube futuro ainda vai render (G12 = 1, Big Six = 2).
+function escolhaDoBot(t, clube, futuros, nivel, jaEscolhidos = [], rng = Math.random, porClube = 1) {
   const opcoes = clube.jogadores.flatMap(j => slotsLivres(t, j.pos).map(i => ({ j, i })));
   if (nivel === 'facil') return opcoes[Math.floor(rng() * opcoes.length)];
   // referência: com k vagas abertas na posição, o k-ésimo melhor que ainda pode vir dos próximos clubes
+  // (cada clube pode render até porClube jogadores dessa posição)
   const vagas = pos => t.slots.filter((p, i) => p === pos && i !== RES && !t.escalacao[i]).length;
-  const referencia = pos => futuros.map(c => Math.max(0, ...c.jogadores.filter(j => j.pos === pos).map(j => j.ovr)))
-    .sort((a, b) => b - a)[vagas(pos) - 1] ?? 0;
+  const referencia = pos => futuros.flatMap(c => {
+    const ovrs = c.jogadores.filter(j => j.pos === pos).map(j => j.ovr).sort((a, b) => b - a);
+    return Array.from({ length: porClube }, (_, k) => ovrs[k] ?? 0);
+  }).sort((a, b) => b - a)[vagas(pos) - 1] ?? 0;
   // peso de cada posição na força (forca(): ataque = média de MEI+ATA; defesa = média com goleiro em dobro)
   const nAtq = t.slots.filter(p => p === 'MEI' || p === 'ATA').length, nDef = t.slots.filter(p => p === 'LAT' || p === 'ZAG').length + 2;
   const peso = { GOL: 2 / nDef, LAT: 1 / nDef, ZAG: 1 / nDef, MEI: 1 / nAtq, ATA: 1 / nAtq };
@@ -190,7 +195,7 @@ function simular(a, b, mataMata, rng = Math.random) {
 }
 
 if (typeof module !== 'undefined') module.exports = {
-  FORMACOES, RES, POSICOES, PENALIDADE, TATICAS, NIVEIS, BONUS_BOT, penalidade,
+  FORMACOES, RES, POSICOES, VAZIO, PENALIDADE, TATICAS, NIVEIS, BONUS_BOT, penalidade,
   rngDe, novaSemente, embaralharCom, escolhaDoBot, taticaDoBot, novoTime, slotsLivres,
   ovrEfetivo, resolverDuplicados, moverReserva, jogadorReserva, reservaPadrao, forca, simular,
 };

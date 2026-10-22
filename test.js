@@ -90,6 +90,7 @@ for (let k = 0; k < 2000; k++) {
 assert(vitorias > 1500, `forte venceu só ${vitorias}/2000`);
 // bots com os elencos reais: preenchem os 12 slots; impossível só repete de propósito (titular, sabotagem); nível alto monta time melhor
 eval(require('fs').readFileSync(__dirname + '/data.js', 'utf8').replace('const CLUBES', 'globalThis.CLUBES'));
+eval(fs.readFileSync(__dirname + '/data-big6.js', 'utf8').replace('const CLUBES_BIG6', 'globalThis.CLUBES_BIG6'));
 
 // online.js é script clássico (sem require/import): expõe as funções puras como globais, que é o
 // que ele espera encontrar (CLUBES, novoTime, RES etc. já são globais pelas linhas acima/por L).
@@ -166,6 +167,51 @@ const base = time('T', 't', 75), melhor = time('M', 'm', 85), pior = time('P', '
 assert.equal(L.taticaDoBot(base, [base, igual]), 'neutro');
 assert.equal(L.taticaDoBot(melhor, [melhor, base]), 'ofensivo');
 assert.equal(L.taticaDoBot(pior, [pior, base]), 'defensivo');
+
+// elencos (G12 e Big Six): posições válidas, overall dentro da régua, ids únicos no jogo todo, e
+// gente suficiente em cada posição pra qualquer formação (o Big Six tira 2 por clube)
+const todosClubes = [...CLUBES, ...CLUBES_BIG6];
+assert.equal(new Set(todosClubes.map(c => c.id)).size, todosClubes.length, 'sigla de clube repetida entre os modos');
+const todosIds = todosClubes.flatMap(c => c.jogadores.map(j => j.id));
+assert.equal(new Set(todosIds).size, todosIds.length, 'jogador repetido (mesmo id) em algum elenco');
+assert.equal(CLUBES.length, 12, 'G12 devia ter 12 clubes');
+assert.deepStrictEqual(CLUBES_BIG6.map(c => c.id).sort(), ['ARS', 'CHE', 'LIV', 'MCI', 'MUN', 'TOT'], 'Big Six: clubes errados');
+for (const c of todosClubes) {
+  for (const j of c.jogadores) {
+    assert(L.POSICOES.includes(j.pos), `${c.id}: ${j.nome} com posição inválida ${j.pos}`);
+    assert(Number.isInteger(j.ovr) && j.ovr >= 55 && j.ovr <= 93, `${c.id}: ${j.nome} com overall fora da régua (${j.ovr})`);
+    assert(j.nome && !/[<>&]/.test(j.nome), `${c.id}: nome estranho "${j.nome}"`);
+    assert(require('fs').existsSync(__dirname + '/' + c.escudo), `${c.id}: escudo não existe`);
+  }
+  const n = pos => c.jogadores.filter(j => j.pos === pos).length;
+  assert(n('GOL') >= 2 && n('LAT') >= 3 && n('ZAG') >= 3 && n('MEI') >= 4 && n('ATA') >= 4, `${c.id}: elenco curto numa posição`);
+}
+
+// Big Six (online.js): 6 clubes × 2 escolhas = 12 slots; bot nunca pega o mesmo jogador duas vezes no
+// clube; índices das escolhas r × 2 + k; rodada só fecha com as 2 escolhas de todo mundo
+assert.equal(O.MODOS.big6.porClube * O.MODOS.big6.clubes.length, 12);
+assert.equal(O.MODOS.g12.porClube * O.MODOS.g12.clubes.length, 12);
+assert.equal(O.modoDe(undefined), O.MODOS.g12, 'sala antiga sem modo devia ser G12');
+for (const nivel of Object.keys(L.NIVEIS)) {
+  for (const formacao of Object.keys(L.FORMACOES)) {
+    const ordem6 = CLUBES_BIG6.map(c => c.id).sort(() => Math.random() - 0.5);
+    const { t, picks: p6 } = O.draftarBotOnline({ nome: 'B', bot: nivel }, ordem6, formacao, 2);
+    assert(t.escalacao.every(Boolean), `Big Six ${nivel} ${formacao}: slot vazio`);
+    assert.equal(Object.keys(p6).length, 12);
+    ordem6.forEach((id, r) => {
+      const dois = O.picksDaRodada({ picks: p6 }, r, 2);
+      assert.equal(dois.length, 2);
+      assert.notEqual(dois[0].jogador, dois[1].jogador, 'bot pegou o mesmo jogador duas vezes');
+      assert(dois.every(x => x.jogador.startsWith(id + ':')), 'escolha caiu no clube errado');
+    });
+    const volta = O.timeDaSala({ nome: 'B', picks: p6 }, formacao);
+    assert.deepStrictEqual(volta.escalacao.map(j => j.id), t.escalacao.map(j => j.id), 'timeDaSala não reconstruiu o time do Big Six');
+  }
+}
+const sala6 = { modo: 'big6', participantes: { h: { picks: { 0: { jogador: 'x', slot: 0 } } }, b: { picks: { 0: {}, 1: {} } } } };
+assert.equal(O.rodadaCompleta(sala6, 0), false, 'Big Six: humano só fez 1 de 2');
+sala6.participantes.h.picks[1] = { jogador: 'y', slot: 1 };
+assert.equal(O.rodadaCompleta(sala6, 0), true, 'Big Six: os dois fizeram as 2');
 
 // versão: a do index.html (única fonte) tem que ser a primeira do CHANGELOG.md — é dali que o jogo lê as novidades
 const versaoHtml = fs.readFileSync(__dirname + '/index.html', 'utf8').match(/const VERSAO = '([^']+)'/)[1];

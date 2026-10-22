@@ -96,6 +96,11 @@
   .nova-versao + .nova-versao { margin-top: 8px; padding-top: 4px; border-top: 3px dashed var(--border); }
   .nova-versao h3 small { font: .8rem Inter, sans-serif; color: var(--muted); }
   .nova-versao .marca { padding: 2px 6px; font: .45rem var(--pixel); vertical-align: 2px; background: var(--accent); color: var(--on-accent); }
+  .bandeira { width: 1.45em; height: auto; aspect-ratio: 7 / 5; flex: none; vertical-align: -0.2em; shape-rendering: crispEdges;
+    border: 2px solid #0b0f0b; box-shadow: 2px 2px 0 rgba(0,0,0,.45); background: #fff; }
+  .menu-opcoes .op b { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .jogador.meu { opacity: 1; border-color: var(--accent); border-style: dashed; }
+  .jogador.meu .nome::after { content: '  ✓ sua'; font: .5rem var(--pixel); color: var(--accent); }
   .novidades li::marker { content: '▶  '; color: var(--accent); font-size: .7em; }
 
   /* ---------- menu: tela de título, ocupando a tela toda ---------- */
@@ -164,7 +169,7 @@
   .escudo { height: 104px; margin-bottom: 6px; display: grid; place-items: center; background: #f4f1e0;
     border: 3px solid #13230f; border-bottom: 8px solid; transition: transform .3s; }
   .escudo img { width: 72px; height: 72px; object-fit: contain; }
-  .mini { width: 1.2em; height: 1.2em; object-fit: contain; vertical-align: -0.25em; }
+  .mini { width: 1.3em; height: 1.3em; object-fit: contain; vertical-align: -0.3em; padding: 1px; background: #f4f1e0; border-radius: 3px; }
   .formacoes { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 24px; }
   .vencedor .escudo { transform: scale(1.08); box-shadow: 0 0 0 4px #ffe23a; }
   .resultado { text-align: center; font-size: 1.1rem; min-height: 2em; }
@@ -254,7 +259,8 @@
   .misterio { width: 130px; height: 130px; margin: 0 auto 20px; display: grid; place-items: center; border: 4px solid var(--moldura);
     background: var(--accent); color: var(--on-accent); font: 4rem/1 var(--pixel); box-shadow: 5px 5px 0 var(--sombra); animation: pulsa 1.4s steps(4) infinite; }
   @keyframes pulsa { 50% { transform: scale(1.08) rotate(-6deg); } }
-  .escudo-grande { width: 96px; height: 96px; object-fit: contain; }
+  /* plaquinha clara atrás do escudo: os escuros (Tottenham, Corinthians, Vasco...) somem no tema Noite */
+  .escudo-grande { width: 112px; height: 112px; object-fit: contain; padding: 10px; background: #f4f1e0; border: 3px solid #13230f; box-shadow: 4px 4px 0 var(--sombra); }
   .cartas { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin: 16px 0; }
   .carta { position: relative; width: 150px; padding: 14px 10px; background: var(--surface); border: 3px solid var(--moldura); box-shadow: 4px 4px 0 var(--sombra);
     display: grid; gap: 4px; opacity: 0; animation: vira .5s ease forwards; }
@@ -296,9 +302,9 @@
   // Versão do jogo: único lugar onde ela é escrita. Aparece no canto da tela e vai no ?v= de cada
   // script — sem isso o navegador reaproveita o .js velho do cache por até 10 min (GitHub Pages manda
   // max-age=600) mesmo com este index.html novo. test.js confere que bate com o topo do CHANGELOG.md.
-  const VERSAO = '1.4.3';
+  const VERSAO = '1.5.0';
   try { const t = localStorage.getItem('tema'); if (t) document.documentElement.dataset.theme = t; } catch {}
-  ['data.js', 'logic.js', 'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',
+  ['data.js', 'data-big6.js', 'logic.js', 'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',
    'https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js', 'firebase-config.js', 'online.js', 'app.js']
     .forEach(src => {
       const s = document.createElement('script');

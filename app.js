@@ -91,9 +91,17 @@ async function abrirNovidades() {
 }
 
 // ---------- pedaços ----------
-const rodadaAtual = () => CLUBES.length - S.restantes.length + 1;
+const modoAtual = () => modoDe(S.modo);
+const rodadaAtual = () => modoAtual().clubes.length - S.restantes.length + 1;
 const cabecalhoRodada = () =>
-  `<div class="rodada"><span>Rodada ${rodadaAtual()}/${CLUBES.length}</span><span>${S.clube ? CLUBE[S.clube].nome : ''}</span></div>`;
+  `<div class="rodada"><span>${modoAtual().nome} · Rodada ${rodadaAtual()}/${modoAtual().clubes.length}</span><span>${S.clube ? CLUBE[S.clube].nome : ''}</span></div>`;
+// Bandeiras desenhadas em SVG: emoji de bandeira não aparece no Windows (vira "BR") e a da
+// Inglaterra é emoji de subdivisão, que quase nenhum sistema mostra.
+const BANDEIRAS = {
+  br: '<rect width="28" height="20" fill="#009c3b"/><path d="M14 2.5 25.5 10 14 17.5 2.5 10z" fill="#ffdf00"/><circle cx="14" cy="10" r="4.3" fill="#002776"/>',
+  eng: '<rect width="28" height="20" fill="#fff"/><rect x="11.5" width="5" height="20" fill="#ce1124"/><rect y="7.5" width="28" height="5" fill="#ce1124"/>',
+};
+const bandeira = cod => `<svg class="bandeira" viewBox="0 0 28 20" aria-hidden="true">${BANDEIRAS[cod]}</svg>`;
 const mini = id => `<img class="mini" src="${CLUBE[id].escudo}" alt="${CLUBE[id].nome}" title="${CLUBE[id].nome}">`;
 const cartaoClube = id =>
   `<div class="clube"><div class="escudo" style="border-bottom-color:${CLUBE[id].bg}"><img src="${CLUBE[id].escudo}" alt=""></div>${CLUBE[id].nome}</div>`;
@@ -170,7 +178,7 @@ function telaMenu() {
   clearInterval(relogio);
   if (oDesinscrever) { oDesinscrever(); oDesinscrever = null; }
   // tela de título 16-bit: placar de mentira com dois clubes sorteados, igual ao HUD do ISS
-  const [ca, cb] = embaralhar(CLUBES.map(c => c.id));
+  const [ca, cb] = embaralhar(Object.keys(CLUBE));   // pode sair Flamengo × Arsenal
   $app.innerHTML = `
   <section class="tela tv">
     <div class="hud" aria-hidden="true">
@@ -180,7 +188,8 @@ function telaMenu() {
     <h1 class="logo-retro"><span class="l1">RESENHA</span><span class="l2">FC</span></h1>
     <p class="pisca">ESCOLHA O MODO</p>
     <nav class="menu-opcoes" aria-label="Modos de jogo">
-      <button class="op ativo" onclick="telaG12()"><b>G12</b><small>12 grandes · local ou online</small></button>
+      <button class="op ativo" onclick="telaModo('g12')"><b>${bandeira('br')}<span>G12</span></b><small>12 grandes do Brasil · 1 por clube</small></button>
+      <button class="op" onclick="telaModo('big6')"><b>${bandeira('eng')}<span>BIG SIX</span></b><small>6 grandes da Inglaterra · 2 por clube</small></button>
       <button class="op" disabled><b>EM BREVE</b><small>novos modos vindo aí</small></button>
     </nav>
     <button class="link-novidades" onclick="abrirNovidades()">★ NOVIDADES DA ${serie(VERSAO)}</button>
@@ -206,14 +215,17 @@ document.addEventListener('keydown', e => {
   ops[(atual + passo + ops.length) % ops.length].focus();
 });
 
-// G12: o único modo por enquanto. Antes de tudo pergunta onde vai ser: no mesmo aparelho ou online.
-function telaG12() {
+// Escolhido o modo (G12 ou Big Six), pergunta onde vai ser: no mesmo aparelho ou online.
+// O modo fica em S.modo (local) e SO.modo (criação de sala online).
+function telaModo(modo = S.modo) {
   if (oDesinscrever) { oDesinscrever(); oDesinscrever = null; }
+  S.modo = SO.modo = modo;
+  const m = modoDe(modo);
   $app.innerHTML = `
   <section class="tela">
     <button class="voltar" onclick="telaMenu()">← Menu</button>
-    <h2>G12 · Onde vai ser a resenha?</h2>
-    <p class="dica">A roleta sorteia um dos 12 grandes, cada um escolhe um jogador às escondidas. Repetiu? Ninguém leva.</p>
+    <h2>${bandeira(m.bandeira)} ${m.nome} · Onde vai ser a resenha?</h2>
+    <p class="dica">${m.resumo}</p>
     <div class="modos">
       <button class="modo" onclick="telaSetup()"><h2>📱 Local</h2><p>Todo mundo no mesmo aparelho, passando de mão em mão. Dá pra jogar contra bots.</p></button>
       <button class="modo" onclick="telaOnlineMenu()"><h2>🌐 Online</h2><p>Cada um no seu aparelho, sincronizado: mesma roleta, mesma revelação e mesmos jogos pra todo mundo.</p></button>
@@ -234,8 +246,8 @@ function telaSetup() {
   const ps = S.participantes, cheio = ps.length >= 6;
   $app.innerHTML = `
   <section class="tela">
-    <button class="voltar" onclick="telaG12()">← G12</button>
-    <h2>G12 · Quem vai jogar?</h2>
+    <button class="voltar" onclick="telaModo()">← ${modoAtual().nome}</button>
+    <h2>${bandeira(modoAtual().bandeira)} ${modoAtual().nome} · Quem vai jogar?</h2>
     <p class="dica">Todo mundo no mesmo aparelho: na sua vez, os outros não olham. Bots escolhem sozinhos.</p>
     <details class="dica"><summary>Como os bots jogam</summary>
       <b>Fácil</b>: escolhe no chute (−1 na partida). <b>Médio</b>: escolhe bem, com erros (+1).
@@ -277,11 +289,11 @@ function escolherFormacao(f) { S.participantes = lerParticipantes(); S.formacao 
 function iniciar(participantes = lerParticipantes(), formacao = S.formacao) {
   const nomes = participantes.map(p => p.nome);
   const times = participantes.map((p, i) => ({
-    ...novoTime(nomes.indexOf(p.nome) < i ? `${p.nome} ${i + 1}` : p.nome, formacao), bot: p.bot,
+    ...novoTime(nomes.indexOf(p.nome) < i ? `${p.nome} ${i + 1}` : p.nome, formacao), bot: p.bot, vazio: modoAtual().vazio,
   }));
   // humanos primeiro: o bot impossível precisa ver o que eles escolheram
   const ordem = [...times.keys()].sort((a, b) => !!times[a].bot - !!times[b].bot);
-  S = { participantes, formacao, times, ordem, restantes: CLUBES.map(c => c.id), picks: [] };
+  S = { modo: S.modo, participantes, formacao, times, ordem, restantes: modoAtual().clubes.map(c => c.id), picks: [] };
   telaRoleta();
 }
 
@@ -326,13 +338,17 @@ function registrarEscolha(t, j, slot) {
   S.picks.push({ clube: S.clube, time: t, j, slot });
 }
 
+// Quem a pessoa da vez já pegou deste clube nesta rodada (no Big Six são 2 escolhas seguidas).
+const minhasDaRodada = t => S.picks.filter(p => p.clube === S.clube && p.time === t);
+
 function proximaVez() {
   for (; S.vez < S.ordem.length && timeDaVez().bot; S.vez++) {
     const t = timeDaVez();
     const jaEscolhidos = S.picks.filter(p => p.clube === S.clube).map(p => p.j.id);
     const futuros = S.restantes.filter(id => id !== S.clube).map(id => CLUBE[id]);
-    const { j, i } = escolhaDoBot(t, CLUBE[S.clube], futuros, t.bot, jaEscolhidos);
-    registrarEscolha(t, j, i);
+    // picksDoBotNoClube já escala no time; registrarEscolha grava de novo no mesmo slot (inofensivo) e anota o pick
+    picksDoBotNoClube(t, CLUBE[S.clube], futuros, t.bot, modoAtual().porClube, jaEscolhidos)
+      .forEach(({ j, i }) => registrarEscolha(t, j, i));
   }
   if (S.vez < S.ordem.length) return humanos() > 1 ? telaVez() : telaEscolha();
   S.restantes = S.restantes.filter(id => id !== S.clube);
@@ -353,7 +369,10 @@ function telaVez() {
 
 function telaEscolha(sel) {
   const t = timeDaVez(), c = CLUBE[S.clube], j = c.jogadores[sel], cego = opcoes.cego;
-  let acao = '<p class="dica">Toque num jogador pra escalar. Jogador de posição já preenchida só entra como reserva.</p>';
+  const pc = modoAtual().porClube, ja = minhasDaRodada(t).map(p => p.j.id);
+  const qual = pc > 1 ? ` <small class="dica">(escolha ${ja.length + 1} de ${pc})</small>` : '';
+  let acao = `<p class="dica">Toque num jogador pra escalar. Jogador de posição já preenchida só entra como reserva.${
+    ja.length ? ` Você já pegou ${ja.map(id => esc(c.jogadores.find(x => x.id === id).nome)).join(', ')} deste clube.` : ''}</p>`;
   if (j) {
     const livres = slotsLivres(t, j.pos);
     const tit = livres.find(i => i !== RES), res = livres.find(i => i === RES);
@@ -365,11 +384,11 @@ function telaEscolha(sel) {
   $app.innerHTML = `
   <section class="tela">
     ${cabecalhoRodada()}
-    <h2>${mini(c.id)} ${esc(t.nome)}: escolha do ${c.nome}</h2>
+    <h2>${mini(c.id)} ${esc(t.nome)}: escolha do ${c.nome}${qual}</h2>
     ${acao}
     <div class="escolha">
       <div class="lista">${c.jogadores.map((p, i) => `
-        <button class="jogador${i === sel ? ' sel' : ''}" onclick="telaEscolha(${i})" ${slotsLivres(t, p.pos).length ? '' : 'disabled'}>
+        <button class="jogador${i === sel ? ' sel' : ''}${ja.includes(p.id) ? ' meu' : ''}" onclick="telaEscolha(${i})" ${slotsLivres(t, p.pos).length && !ja.includes(p.id) ? '' : 'disabled'}>
           <span class="pos">${p.pos}</span><span class="nome">${esc(p.nome)}</span><span class="ovr">${cego ? '??' : p.ovr}</span>
         </button>`).join('')}</div>
       <div>${placa(t, cego)}${campo(t, cego)}</div>
@@ -378,7 +397,9 @@ function telaEscolha(sel) {
 }
 
 function confirmar(i, slot) {
-  registrarEscolha(timeDaVez(), CLUBE[S.clube].jogadores[i], slot);
+  const t = timeDaVez();
+  registrarEscolha(t, CLUBE[S.clube].jogadores[i], slot);
+  if (minhasDaRodada(t).length < modoAtual().porClube) return telaEscolha();   // Big Six: falta a 2ª
   S.vez++;
   proximaVez();
 }
@@ -392,8 +413,8 @@ function telaOnlineMenu() {
   if (oDesinscrever) { oDesinscrever(); oDesinscrever = null; }
   $app.innerHTML = `
   <section class="tela">
-    <button class="voltar" onclick="telaG12()">← G12</button>
-    <h2>G12 · Jogar online</h2>
+    <button class="voltar" onclick="telaModo(SO.modo)">← ${modoDe(SO.modo).nome}</button>
+    <h2>${bandeira(modoDe(SO.modo).bandeira)} ${modoDe(SO.modo).nome} · Jogar online</h2>
     <p class="dica">Cada um no seu aparelho, mas sincronizado: todo mundo vê a mesma roleta, a mesma revelação e os mesmos jogos, no mesmo momento.</p>
     <div class="modos">
       <button class="modo" onclick="telaCriarSala()"><h2>Criar sala</h2><p>Você escolhe a formação e as opções, e manda o código pros seus amigos.</p></button>
@@ -410,7 +431,7 @@ function telaCriarSala(nomeAtual) {
   $app.innerHTML = `
   <section class="tela">
     <button class="voltar" onclick="telaOnlineMenu()">← Online</button>
-    <h2>Criar sala</h2>
+    <h2>Criar sala · ${modoDe(SO.modo).nome}</h2>
     <div class="nomes"><input id="oNome" maxlength="16" placeholder="Seu nome" value="${esc(nome)}"></div>
     <h3>Formação (igual pra todos)</h3>
     <div class="formacoes">${Object.keys(FORMACOES).map(f =>
@@ -432,7 +453,7 @@ async function criarSalaClique() {
   salvarPref('nomeOnline', nome);
   $('oBtn').disabled = true;
   try {
-    const codigo = await criarSalaOnline(nome, SO.formacao, SO.cego, SO.velocidade);
+    const codigo = await criarSalaOnline(nome, SO.formacao, SO.cego, SO.velocidade, SO.modo || 'g12');
     telaSalaCriada(codigo);
   } catch (e) { $('oErro').textContent = '⚠ ' + e.message; $('oBtn').disabled = false; }
 }
@@ -469,7 +490,7 @@ function telaEntrarSala(codigoAtual, nomeAtual) {
       <input id="oCodigo" maxlength="4" placeholder="Código (ex: ABCD)" style="text-transform:uppercase" value="${esc(codigo)}">
       <input id="oNome" maxlength="16" placeholder="Seu nome" value="${esc(nome)}">
     </div>
-    <p class="dica">Às cegas e velocidade já vêm decididos por quem criou a sala.</p>
+    <p class="dica">Modo (G12 ou Big Six), às cegas e velocidade já vêm decididos por quem criou a sala.</p>
     <p class="dica" id="oErro"></p>
     <button class="btn" id="oBtn" onclick="entrarSalaClique()">Entrar</button>
   </section>`;
@@ -503,7 +524,7 @@ function entrarNaSalaLocal(codigo) {
     const mudouRodada = sala.estado === 'draft' && sala.rodadaAtual !== u.rodadaAtual;
     const mudouRevel = sala.estado === 'revelacao' && sala.revelAtual !== u.revelAtual;
     const mudouJogo = sala.estado === 'jogos' && sala.jogoAtual !== u.jogoAtual;
-    const jaFiz = sala.estado === 'draft' ? eu.picks?.[sala.rodadaAtual] != null
+    const jaFiz = sala.estado === 'draft' ? fezRodada(sala, eu, sala.rodadaAtual)
       : sala.estado === 'tatica' ? (!!eu.bot || !!eu.taticaPronto) : false;
     const naTelaEspera = !!($app.querySelector('.espera-lista') || $app.querySelector('.espera-rodada'));
     if (mudouFase || mudouRodada || mudouRevel || mudouJogo || (jaFiz && naTelaEspera)) roteirarOnline();
@@ -513,9 +534,14 @@ function entrarNaSalaLocal(codigo) {
 function roteirarOnline() {
   const sala = SO.sala, eu = sala?.participantes?.[meuId()];
   if (!sala || !eu) return;
+  SO.modo = sala.modo || 'g12';   // quem entrou por código também fica sabendo o modo (pra "Nova sala")
   SO._ultimo = { estado: sala.estado, rodadaAtual: sala.rodadaAtual, revelAtual: sala.revelAtual, jogoAtual: sala.jogoAtual };
   if (sala.estado === 'lobby') return telaLobbyOnline();
-  if (sala.estado === 'draft') return (eu.picks?.[sala.rodadaAtual] != null) ? telaEsperaRodadaOnline() : telaRoletaVivaOnline();
+  if (sala.estado === 'draft') {
+    if (fezRodada(sala, eu, sala.rodadaAtual)) return telaEsperaRodadaOnline();
+    // Big Six: quem já fez a 1ª escolha do clube (e recarregou, por exemplo) volta direto pra 2ª, sem roleta
+    return picksDaRodada(eu, sala.rodadaAtual, modoDe(sala.modo).porClube).length ? telaEscolherRodadaOnline() : telaRoletaVivaOnline();
+  }
   if (sala.estado === 'revelacao') return telaRevelacaoOnline();
   if (sala.estado === 'tatica') return (!eu.bot && !eu.taticaPronto) ? telaEscolhaTaticaOnline() : telaEsperaTaticaOnline();
   if (sala.estado === 'jogos') return telaJogoOnline();
@@ -530,7 +556,7 @@ function telaLobbyOnline() {
     <p class="dica">Sala <b>${esc(SO.codigo)}</b> · manda esse código pros seus amigos</p>
     <h2 class="grande">Sala de espera</h2>
     <ul class="espera-lista">${participantes.map(p => `<li>${p.bot ? '🤖' : '👤'} ${esc(p.nome)}</li>`).join('')}</ul>
-    <p class="dica">${sala.formacao} · ${sala.cego ? '🙈 às cegas' : '👀 overalls visíveis'} · ${NOME_VELOCIDADE[sala.velocidade]}</p>
+    <p class="dica">${bandeira(modoDe(sala.modo).bandeira)} ${modoDe(sala.modo).nome} · ${sala.formacao} · ${sala.cego ? '🙈 às cegas' : '👀 overalls visíveis'} · ${NOME_VELOCIDADE[sala.velocidade]}</p>
     ${souAnfitriao ? `
       <div class="acoes centralizado">${Object.keys(NIVEIS).map(n => `<button class="btn sec" onclick="adicionarBotClique('${n}')">+ ${NIVEIS[n]} 🤖</button>`).join('')}</div>
       <button class="btn" ${participantes.length < 2 ? 'disabled' : ''} onclick="comecarDraftClique()">Começar o draft pra todo mundo 🎲</button>
@@ -541,7 +567,7 @@ async function adicionarBotClique(nivel) { await adicionarBotOnline(SO.codigo, n
 async function comecarDraftClique() { await iniciarDraftOnline(SO.codigo); }
 
 // ---------- draft (rodada a rodada, roleta ao vivo) ----------
-const meuTimeParcial = sala => timeDaSala(sala.participantes[meuId()], sala.formacao);
+const meuTimeParcial = sala => timeDaSala(sala.participantes[meuId()], sala.formacao, sala.modo);
 
 function telaRoletaVivaOnline() {
   const sala = SO.sala, alvo = sala.clubesOrdem[sala.rodadaAtual];
@@ -564,15 +590,18 @@ function telaRoletaVivaOnline() {
     faixa.style.transform = `translateX(${-alvoPx}px)`;
     faixa.addEventListener('transitionend', () => {
       carta.classList.add('vencedor');
-      $('resultadoO').innerHTML = `<p>Saiu ${mini(alvo)} <strong>${CLUBE[alvo].nome}</strong>!</p><button class="btn" onclick="telaEscolherRodadaOnline()">Escolher meu jogador</button>`;
+      $('resultadoO').innerHTML = `<p>Saiu ${mini(alvo)} <strong>${CLUBE[alvo].nome}</strong>!</p><button class="btn" onclick="telaEscolherRodadaOnline()">${modoDe(sala.modo).porClube > 1 ? `Escolher meus ${modoDe(sala.modo).porClube} jogadores` : 'Escolher meu jogador'}</button>`;
     }, { once: true });
   });
 }
 
 function telaEscolherRodadaOnline(sel) {
   const sala = SO.sala, rodada = sala.rodadaAtual, c = CLUBE[sala.clubesOrdem[rodada]], cego = sala.cego;
-  const meuTime = meuTimeParcial(sala);
-  let acao = '<p class="dica">Toque num jogador pra escalar. Jogador de posição já preenchida só entra como reserva.</p>';
+  const meuTime = meuTimeParcial(sala), pc = modoDe(sala.modo).porClube;
+  const ja = picksDaRodada(sala.participantes[meuId()], rodada, pc).map(p => p.jogador);
+  const qual = pc > 1 ? ` <small class="dica">(escolha ${ja.length + 1} de ${pc})</small>` : '';
+  let acao = `<p class="dica">Toque num jogador pra escalar. Jogador de posição já preenchida só entra como reserva.${
+    ja.length ? ` Você já pegou ${ja.map(id => esc(jogadorPorId(id).nome)).join(', ')} deste clube.` : ''}</p>`;
   if (sel != null) {
     const j = c.jogadores[sel], livres = slotsLivres(meuTime, j.pos);
     const tit = livres.find(i => i !== RES), res = livres.find(i => i === RES);
@@ -584,10 +613,11 @@ function telaEscolherRodadaOnline(sel) {
   $app.innerHTML = `
   <section class="tela">
     <div class="rodada"><span>Sala ${esc(SO.codigo)} · Rodada ${rodada + 1}/${sala.clubesOrdem.length}</span><span>${c.nome}</span></div>
+    <h2>${mini(c.id)} Sua escolha do ${c.nome}${qual}</h2>
     ${acao}
     <div class="escolha">
       <div class="lista">${c.jogadores.map((p, i) => `
-        <button class="jogador${i === sel ? ' sel' : ''}" onclick="telaEscolherRodadaOnline(${i})" ${slotsLivres(meuTime, p.pos).length ? '' : 'disabled'}>
+        <button class="jogador${i === sel ? ' sel' : ''}${ja.includes(p.id) ? ' meu' : ''}" onclick="telaEscolherRodadaOnline(${i})" ${slotsLivres(meuTime, p.pos).length && !ja.includes(p.id) ? '' : 'disabled'}>
           <span class="pos">${p.pos}</span><span class="nome">${esc(p.nome)}</span><span class="ovr">${cego ? '??' : p.ovr}</span></button>`).join('')}</div>
       <div>${placa(meuTime, cego)}${campo(meuTime, cego)}</div>
     </div>
@@ -596,22 +626,24 @@ function telaEscolherRodadaOnline(sel) {
 
 async function confirmarPickOnline(i, slot) {
   const sala = SO.sala, rodada = sala.rodadaAtual, j = CLUBE[sala.clubesOrdem[rodada]].jogadores[i];
-  await registrarPickOnline(SO.codigo, rodada, slot, j.id);
-  SO.sala.participantes[meuId()].picks ??= {};
-  SO.sala.participantes[meuId()].picks[rodada] = { jogador: j.id, slot };   // atualização local otimista
-  roteirarOnline();
+  const eu = sala.participantes[meuId()], pc = modoDe(sala.modo).porClube;
+  const indice = indicePick(rodada, picksDaRodada(eu, rodada, pc).length, pc);
+  await registrarPickOnline(SO.codigo, indice, slot, j.id);
+  eu.picks ??= {};
+  eu.picks[indice] = { jogador: j.id, slot };   // atualização local otimista
+  roteirarOnline();   // Big Six: volta pra escolha (falta a 2ª) ou vai pra espera
 }
 
 function telaEsperaRodadaOnline() {
   const sala = SO.sala, participantes = Object.values(sala.participantes);
-  const prontos = participantes.filter(p => p.picks?.[sala.rodadaAtual] != null).length;
+  const prontos = participantes.filter(p => fezRodada(sala, p, sala.rodadaAtual)).length;
   const todosProntos = prontos === participantes.length, souAnfitriao = sala.anfitriao === meuId();
   const ultimaRodada = sala.rodadaAtual === sala.clubesOrdem.length - 1;
   $app.innerHTML = `
   <section class="tela centro espera-rodada">
     <p class="dica">Rodada ${sala.rodadaAtual + 1}/${sala.clubesOrdem.length}</p>
     <h2 class="grande">${prontos}/${participantes.length} escolheram</h2>
-    <ul class="espera-lista">${participantes.map(p => `<li>${p.picks?.[sala.rodadaAtual] != null ? '✅' : '⏳'} ${esc(p.nome)}${p.bot ? ' 🤖' : ''}</li>`).join('')}</ul>
+    <ul class="espera-lista">${participantes.map(p => `<li>${fezRodada(sala, p, sala.rodadaAtual) ? '✅' : '⏳'} ${esc(p.nome)}${p.bot ? ' 🤖' : ''}</li>`).join('')}</ul>
     ${souAnfitriao
       ? `<button class="btn" ${todosProntos ? '' : 'disabled'} onclick="${ultimaRodada ? 'irPraRevelacaoClique()' : 'proximaRodadaClique()'}">${ultimaRodada ? 'Todo mundo pronto! Ver a revelação 🎭' : 'Todo mundo pronto! Próxima rodada 🎲'}</button>`
       : '<p class="dica">Só quem criou a sala avança a rodada.</p>'}
@@ -629,7 +661,7 @@ function telaRevelacaoOnline() {
   const souAnfitriao = sala.anfitriao === meuId(), slotsFormacao = novoTime('', sala.formacao).slots;
   const rodadaDesseClube = sala.clubesOrdem.indexOf(id);
   const picks = embaralhar(Object.values(sala.participantes)
-    .map(p => ({ p, pick: p.picks?.[rodadaDesseClube] })).filter(x => x.pick));
+    .flatMap(p => picksDaRodada(p, rodadaDesseClube, modoDe(sala.modo).porClube).map(pick => ({ p, pick }))));
   const conta = {};
   picks.forEach(x => (conta[x.pick.jogador] = (conta[x.pick.jogador] || 0) + 1));
   const bateu = picks.some(x => conta[x.pick.jogador] > 1);
@@ -715,7 +747,7 @@ function registrarTabelaOnline(A, B, [ga, gb]) {
 }
 
 function montarTimesOnline(sala) {
-  const times = Object.fromEntries(Object.entries(sala.participantes).map(([id, p]) => [id, Object.assign(timeDaSala(p, sala.formacao), { _id: id })]));
+  const times = Object.fromEntries(Object.entries(sala.participantes).map(([id, p]) => [id, Object.assign(timeDaSala(p, sala.formacao, sala.modo), { _id: id })]));
   const todos = Object.values(times);
   resolverDuplicados(todos);
   // reserva: onde a pessoa mandou na tela de tática; sem escolha gravada (bots), o buraco que dói menos
@@ -803,13 +835,13 @@ function telaFinalOnline() {
 
 // ---------- revelação ----------
 function telaSuspense() {
-  S.fila = embaralhar(CLUBES.map(c => c.id));
+  S.fila = embaralhar(modoAtual().clubes.map(c => c.id));
   S.revelados = 0;
   $app.innerHTML = `
   <section class="tela centro">
     <div class="misterio" aria-hidden="true">?</div>
     <h2 class="grande">Hora da verdade</h2>
-    <p>12 rodadas, ${S.times.length} times montados no escuro.<br>Quem bateu de frente com quem?</p>
+    <p>${modoAtual().clubes.length} rodadas, ${S.times.length} times montados no escuro.<br>Quem bateu de frente com quem?</p>
     <div class="acoes centralizado">
       <button class="btn" onclick="telaRevelaClube()">Revelar um por um</button>
       <button class="btn sec" onclick="telaTimes()">Revelar tudo de uma vez</button>

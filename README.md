@@ -1,7 +1,10 @@
 # Resenha FC
 
-Draft às cegas dos 12 grandes do Brasil, pra jogar com os amigos no mesmo aparelho (ou online, cada um no seu) ou contra bots.
-A roleta sorteia um clube, cada um escolhe um jogador sem ver o dos outros. Repetiu? Ninguém leva.
+Draft às cegas, pra jogar com os amigos no mesmo aparelho (ou online, cada um no seu) ou contra bots. Dois modos:
+- **G12**: os 12 grandes do Brasil. A roleta sorteia um clube por rodada e cada um escolhe **1** jogador dele.
+- **Big Six**: Arsenal, Manchester City, Manchester United, Chelsea, Tottenham e Liverpool. 6 rodadas, e cada um escolhe **2** jogadores do clube sorteado.
+
+Ninguém vê a escolha dos outros. Repetiu? Ninguém leva.
 Depois escolhe a tática (ataque, neutro ou defesa) e os times se enfrentam numa partida simulada pelos overalls.
 
 **Jogar:** https://matheuscaleiroo.github.io/resenha-fc/
@@ -25,7 +28,8 @@ Pra testar o offline: `python -m http.server` na pasta e abrir http://localhost:
 
 ## Desenvolvimento
 - `node test.js`: testa as regras (repetidos, reserva, simulação, bots).
-- `node tools/atualizar-elencos.js`: baixa elencos e escudos atuais do Transfermarkt e gera `data.js`.
+- `node tools/atualizar-elencos.js [g12|big6]`: baixa elencos e escudos atuais do Transfermarkt e gera `data.js` (G12) e/ou `data-big6.js` (Big Six).
+- `node tools/balanceamento.js [n]`: joga milhares de drafts e partidas sem tela e compara o balanceamento dos modos (vitória dos bots, gols, zebras, repetidos).
 - Decisões, erros e o que não foi testado: [DECISOES.md](DECISOES.md). Plano mobile: [PLANO-MOBILE.md](PLANO-MOBILE.md).
 
 Projeto de brincadeira entre amigos. Escudos e nomes pertencem aos clubes. Elencos e valores vêm do Transfermarkt, e os overalls são estimativa.

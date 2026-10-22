@@ -2,6 +2,13 @@
 
 Resumo do que mudou em cada versão, pra quem joga (não é o histórico técnico — isso fica no `DECISOES.md`).
 
+## 1.5.0 — 2026-10-22
+- **Modo novo: Big Six**. Os 6 grandes da Inglaterra (Arsenal, Manchester City, Manchester United, Chelsea, Tottenham e Liverpool). Mesmo esquema do G12, mas são 6 rodadas e em cada uma você escolhe **2 jogadores** do clube sorteado. Repetiu? Ninguém leva, igual.
+- Funciona no **local** (com bots) e no **online**: quem cria a sala define o modo, e quem entra pelo código já cai no modo certo.
+- **Elencos atuais do Transfermarkt** (outubro de 2026). A Premier tem uma régua de overall própria: os valores de mercado lá são muito mais altos e parecidos entre si, e com a régua do Brasil quase todo mundo ficava entre 85 e 90. Promessa muito nova perde um pouco (o mercado paga pelo futuro), e alguns veteranos e goleiros de elite foram ajustados à mão (Van Dijk, Alisson, Donnarumma, Emiliano Martínez, Bruno Fernandes, Robertson).
+- **Balanceado com milhares de partidas simuladas**: contra os bots o Big Six fica igual ao G12, e entre amigos a diferença entre o melhor e o pior time, os gols por jogo e as zebras também. Pra isso, posição vazia (repetido sem reserva) no Big Six vale 59 em vez de 50, pra doer o mesmo tanto que no G12.
+- **Bandeiras** no menu: a do Brasil no G12 e a da Inglaterra no Big Six.
+
 ## 1.4.3 — 2026-10-22
 - **Novidades mostram a 1.4 inteira**: a janela de novidades agora lista todas as atualizações da 1.4 (1.4, 1.4.1, 1.4.2, 1.4.3), da mais nova pra mais antiga, em vez de só a última.
 - **Menu com um modo só, o G12**: ao entrar nele, o jogo pergunta se vai ser **Local** (todo mundo no mesmo aparelho, com bots) ou **Online** (cada um no seu). O botão Online saiu do menu principal.
