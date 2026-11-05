@@ -201,6 +201,6 @@ ode.exe' test.js` (PowerShell). Atualizar elencos e escudos: `node tools/atualiz
 - **Não testado**: login e regras contra o Firebase de verdade (dependem dos dois passos acima), duas pessoas reais online.
 
 ## Sessão 13: v1.6.1 — conta presa sem perfil, telas de entrar/criar
-48. **Login sem perfil se conserta sozinho**:  cria  se não existir (nome = parte do e-mail antes do @, em minúsculas). Acontecia com quem se cadastrou depois de ativar o Auth e antes de publicar as regras: o login existia, o perfil não, e a tela ficava esperando para sempre.
-49. **Entrar e Criar conta separados** (), com form (Enter envia), repetir a senha, mensagens em  /  e o botão mostrando 'Entrando…' e 'Carregando seu perfil…'.
+48. **Login sem perfil se conserta sozinho**: `ouvirConta` cria `usuarios/{uid}` se não existir (nome = parte do e-mail antes do @, em minúsculas). Acontecia com quem se cadastrou depois de ativar o Auth e antes de publicar as regras: o login existia, o perfil não, e a tela ficava esperando para sempre.
+49. **Entrar e Criar conta separados** (`telaConta('entrar' | 'criar')`), com form (Enter envia), repetir a senha, mensagens em `.aviso-erro` / `.aviso-ok` e o botão mostrando 'Entrando…' e 'Carregando seu perfil…'.
 - Verificado contra o Firebase de verdade (Edge headless): login sem perfil entra e o perfil é criado; senha errada; senhas diferentes; usuário com espaço; usuário que já existe; conta nova criada. As contas temporárias do teste foram apagadas (sobra só a claude_teste).
