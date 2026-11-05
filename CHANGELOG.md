@@ -2,6 +2,10 @@
 
 Resumo do que mudou em cada versão, pra quem joga (não é o histórico técnico — isso fica no `DECISOES.md`).
 
+## 1.6.1 — 2026-11-05
+- **Entrar e Criar conta em telas separadas**, com abas no topo, campo de repetir a senha no cadastro, as regras do usuário à vista, aviso de erro em destaque e confirmação de que você entrou.
+- Correção: quem criou a conta antes das regras do banco estarem prontas entrava e a tela não mudava (o perfil nunca tinha sido salvo). Agora o perfil é criado na hora do login.
+
 ## 1.6 — 2026-11-05
 - **Conta** (só usuário e senha), no menu: guarda suas moedas e te coloca no ranking. Continua dando pra jogar sem conta.
 - **Moedas**: em campeonato com 3 ou mais times, a colocação paga: 1º 10, 2º 5, 3º 4, 4º 3, 5º 2 e 6º 1 (se fez pelo menos 1 ponto). **🪙 Moedas** no local, só quando é você sozinho contra 2 ou mais bots (com mais gente no mesmo aparelho não vale). **💎 Diamantes** no online. São duas moedas separadas porque no futuro vão valer coisas diferentes.

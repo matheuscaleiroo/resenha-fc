@@ -233,7 +233,10 @@ function ouvirConta(cb) {
     desligarPerfil();
     if (!u) return cb(null, null);
     const ref = dbOnline.ref(`usuarios/${u.uid}`);
-    const f = ref.on('value', s => cb(u, s.val()));
+    // conta sem perfil (criada antes das regras do banco, ou a gravação falhou): cria agora, senão a
+    // pessoa entrava e ficava presa na tela de login esperando um perfil que nunca chega
+    const f = ref.on('value', s => (s.exists() ? cb(u, s.val())
+      : ref.set({ nome: u.email.split('@')[0], ...PERFIL_NOVO }).catch(e => cb(u, null, e))));
     desligarPerfil = () => ref.off('value', f);
   });
 }

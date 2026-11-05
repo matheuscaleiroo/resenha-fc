@@ -220,19 +220,26 @@ function telaMenu() {
 let CONTA = { user: null, perfil: null };
 function iniciarConta() {
   try {
-    ouvirConta((user, perfil) => {
+    ouvirConta((user, perfil, erro) => {
+      const entrou = !CONTA.perfil && perfil;
       CONTA = { user, perfil };
       if ($app.querySelector('.tv')) telaMenu();
-      else if ($app.querySelector('.tela-conta')) telaConta();
+      else if ($app.querySelector('.tela-conta')) {
+        if (erro) telaConta(SO.modoConta, 'Entrou, mas não consegui salvar o perfil: confira as regras do banco (database.rules.json).');
+        else telaConta(SO.modoConta, '', entrou);
+      }
     });
   } catch {}   // sem internet / abrindo do disco sem o SDK: segue sem conta
 }
 
-function telaConta(erro = '') {
-  const p = CONTA.perfil;
+// modo: 'entrar' ou 'criar' (telas diferentes, pra não confundir); bemVindo = acabou de entrar
+function telaConta(modo = 'entrar', erro = '', bemVindo = false) {
+  SO.modoConta = modo;
+  const p = CONTA.perfil, criar = modo === 'criar';
   $app.innerHTML = p ? `
   <section class="tela tela-conta">
     <button class="voltar" onclick="telaMenu()">← Menu</button>
+    ${bemVindo ? `<p class="aviso-ok">✅ ${criar ? 'Conta criada' : 'Você entrou'}! Bem-vindo, ${esc(p.nome)}.</p>` : ''}
     <h2>👤 ${esc(p.nome)}</h2>
     <div class="saldo"><div><b>🪙 ${p.moedasLocal}</b><small>moedas (contra bots)</small></div><div><b>💎 ${p.moedasOnline}</b><small>diamantes (online)</small></div></div>
     <p>Online: <b>${p.titulos}</b> títulos · <b>${p.vitorias}</b> vitórias · <b>${p.jogos}</b> campeonatos</p>
@@ -241,14 +248,22 @@ function telaConta(erro = '') {
   </section>` : `
   <section class="tela tela-conta">
     <button class="voltar" onclick="telaMenu()">← Menu</button>
-    <h2>👤 Conta</h2>
-    <p class="dica">Só usuário e senha. Com conta você junta moedas e entra no ranking. Sem conta dá pra jogar normal.</p>
-    <div class="nomes">
-      <input id="cUsuario" maxlength="16" placeholder="Usuário" autocomplete="username" value="${esc(lerPref('nomeOnline') || '')}">
-      <input id="cSenha" type="password" placeholder="Senha (mín. 6)" autocomplete="current-password">
+    <div class="abas-conta" role="tablist">
+      <button class="${criar ? '' : 'ativa'}" role="tab" aria-selected="${!criar}" onclick="telaConta('entrar')">🔑 Já tenho conta</button>
+      <button class="${criar ? 'ativa' : ''}" role="tab" aria-selected="${criar}" onclick="telaConta('criar')">✨ Criar conta</button>
     </div>
-    <p class="dica" id="cErro">${erro ? '⚠ ' + esc(erro) : ''}</p>
-    <div class="acoes"><button class="btn" id="cEntrar" onclick="contaClique(entrarConta)">Entrar</button><button class="btn sec" id="cCriar" onclick="contaClique(criarConta)">Criar conta</button></div>
+    <h2>${criar ? '✨ Criar conta nova' : '🔑 Entrar na sua conta'}</h2>
+    <p class="dica">${criar ? 'Escolha um usuário e uma senha. Com conta você junta moedas e entra no ranking.' : 'Use o usuário e a senha que você criou.'} Sem conta dá pra jogar normal.</p>
+    <form class="form-conta" onsubmit="event.preventDefault(); contaClique()">
+      <label>Usuário<input id="cUsuario" maxlength="16" autocomplete="username" autocapitalize="none" spellcheck="false" value="${esc(SO.usuarioDigitado ?? '')}"></label>
+      ${criar ? '<small class="dica">3 a 16 letras, números ou _ · sem espaço e sem acento</small>' : ''}
+      <label>Senha<input id="cSenha" type="password" autocomplete="${criar ? 'new-password' : 'current-password'}"></label>
+      ${criar ? `<small class="dica">pelo menos 6 caracteres</small>
+      <label>Repita a senha<input id="cSenha2" type="password" autocomplete="new-password"></label>` : ''}
+      ${erro ? `<p class="aviso-erro" role="alert">⚠ ${esc(erro)}</p>` : ''}
+      <button class="btn" id="cBtn">${criar ? 'Criar minha conta' : 'Entrar'}</button>
+    </form>
+    <p class="dica">${criar ? 'Já tem conta? <button class="link" onclick="telaConta(\'entrar\')">Entrar</button>' : 'Primeira vez? <button class="link" onclick="telaConta(\'criar\')">Criar conta</button>'}</p>
     ${comoGanhar}
   </section>`;
 }
@@ -256,11 +271,18 @@ const comoGanhar = `<details class="dica"><summary>Como ganhar</summary>
   Campeonato com 3 ou mais times. Por colocação: 1º 10 · 2º 5 · 3º 4 · 4º 3 · 5º 2 · 6º 1 (se fez ponto).
   <b>🪙 Moedas</b>: no local, só você contra 2 ou mais bots (com mais gente no aparelho não vale).
   <b>💎 Diamantes</b>: no online. Vitórias e títulos do online contam pro ranking.</details>`;
-async function contaClique(acao) {
-  const u = $('cUsuario').value.trim(), s = $('cSenha').value;
-  $('cEntrar').disabled = $('cCriar').disabled = true;
-  try { await acao(u, s); salvarPref('nomeOnline', u); }   // ouvirConta redesenha quando o perfil chegar
-  catch (e) { telaConta(e.message); }
+async function contaClique() {
+  const criar = SO.modoConta === 'criar', u = $('cUsuario').value.trim(), s = $('cSenha').value;
+  SO.usuarioDigitado = u;
+  if (!u || !s) return telaConta(SO.modoConta, 'Preencha usuário e senha.');
+  if (criar && s !== $('cSenha2').value) return telaConta('criar', 'As duas senhas não são iguais.');
+  $('cBtn').disabled = true;
+  $('cBtn').textContent = criar ? 'Criando…' : 'Entrando…';
+  try {
+    await (criar ? criarConta : entrarConta)(u, s);
+    salvarPref('nomeOnline', u);
+    if ($('cBtn')) $('cBtn').textContent = 'Carregando seu perfil…';   // ouvirConta redesenha quando o perfil chegar
+  } catch (e) { telaConta(SO.modoConta, e.message); }
 }
 
 // Só online. Jogadores de futebol: chave do Firebase → jogador do data.js (quem saiu do elenco some).
