@@ -85,6 +85,17 @@ function moverReserva(t, slot) {
 }
 const jogadorReserva = t => t.escalacao[t.reservaEm ?? RES];
 
+// Onde a reserva PODE jogar (v1.6): banco sempre; se abriu buraco (repetido), só nos buracos — ninguém
+// que está na posição certa sai; time completo, só no lugar do titular da mesma posição dela.
+function opcoesReserva(t) {
+  const r = jogadorReserva(t);
+  if (!r) return [RES];
+  const dono = i => (i === t.reservaEm ? t.escalacao[RES] : t.escalacao[i]);   // quem está no slot sem a reserva
+  const campo = t.slots.map((_, i) => i).filter(i => i !== RES);
+  const buracos = campo.filter(i => !dono(i));
+  return [RES, ...(buracos.length ? buracos : campo.filter(i => t.slots[i] === r.pos))];
+}
+
 // Sugestão (e escolha dos bots): o buraco onde a reserva perde menos overall; sem buraco, fica no banco.
 function reservaPadrao(t) {
   const r = t.escalacao[RES];
@@ -204,5 +215,5 @@ function simular(a, b, mataMata, rng = Math.random) {
 if (typeof module !== 'undefined') module.exports = {
   FORMACOES, RES, POSICOES, VAZIO, PENALIDADE, TATICAS, NIVEIS, BONUS_BOT, penalidade,
   rngDe, novaSemente, embaralharCom, escolhaDoBot, taticaDoBot, novoTime, slotsLivres,
-  ovrEfetivo, resolverDuplicados, moverReserva, jogadorReserva, reservaPadrao, forca, simular,
+  ovrEfetivo, resolverDuplicados, moverReserva, jogadorReserva, opcoesReserva, reservaPadrao, forca, simular,
 };

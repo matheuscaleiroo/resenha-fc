@@ -2,6 +2,13 @@
 
 Resumo do que mudou em cada versão, pra quem joga (não é o histórico técnico — isso fica no `DECISOES.md`).
 
+## 1.6 — 2026-11-05
+- **Conta** (só usuário e senha), no menu: guarda suas moedas e te coloca no ranking. Continua dando pra jogar sem conta.
+- **Moedas**: em campeonato com 3 ou mais times, a colocação paga: 1º 10, 2º 5, 3º 4, 4º 3, 5º 2 e 6º 1 (se fez pelo menos 1 ponto). **🪙 Moedas** no local, só quando é você sozinho contra 2 ou mais bots (com mais gente no mesmo aparelho não vale). **💎 Diamantes** no online. São duas moedas separadas porque no futuro vão valer coisas diferentes.
+- **Ranking do online**, público: jogadores com mais vitórias (e títulos), jogadores de futebol mais escolhidos e artilheiros. Só conta o online.
+- **Reserva mais simples na tática**: com o time completo, o reserva só pode trocar com o titular da mesma posição. Se abriu buraco (repetido), ele só pode entrar num buraco, sem tirar ninguém que está na posição certa. Cada opção mostra quanto ele perde ali.
+- **Às cegas de verdade**: com a opção ligada, o overall não aparece mais na revelação, nos times, na tática nem nos jogos. Do reserva aparece só quanto ele perde em cada posição.
+
 ## 1.5.2 — 2026-11-05
 - **Elencos completos**: todos os jogadores de cada clube estão no jogo, nos 12 do G12 e nos 6 do Big Six (de 24 a 40 por clube, antes eram 21). Voltaram nomes como Hulk, Germán Cano, Ganso, Soteldo, Maguire, Merino, Rico Lewis, Maddison e Richarlison. Elencos atualizados do Transfermarkt (novembro de 2026).
 - Correção: o Alisson do Fluminense ganhava o overall do Alisson do Liverpool (o ajuste manual era só pelo nome). Agora cada ajuste vale só para o clube certo.

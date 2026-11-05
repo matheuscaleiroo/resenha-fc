@@ -1,0 +1,35 @@
+{
+  "rules": {
+    "salas": {
+      "$codigo": { ".read": true, ".write": true }
+    },
+    "usuarios": {
+      ".read": true,
+      ".indexOn": ["vitorias", "titulos"],
+      "$uid": {
+        ".write": "auth != null && auth.uid === $uid",
+        ".validate": "newData.child('nome').isString() && newData.child('nome').val().toLowerCase() + '@resenhafc.invalid' === auth.token.email",
+        "nome": { ".validate": "!data.exists() || newData.val() === data.val()" },
+        "moedasLocal": { ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === 0) || (data.exists() && newData.val() >= data.val() && newData.val() <= data.val() + 10))" },
+        "moedasOnline": { ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === 0) || (data.exists() && newData.val() >= data.val() && newData.val() <= data.val() + 10))" },
+        "vitorias": { ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === 0) || (data.exists() && newData.val() >= data.val() && newData.val() <= data.val() + 5))" },
+        "titulos": { ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === 0) || (data.exists() && newData.val() >= data.val() && newData.val() <= data.val() + 1))" },
+        "jogos": { ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === 0) || (data.exists() && newData.val() >= data.val() && newData.val() <= data.val() + 1))" },
+        "premiadas": {
+          "$id": { ".validate": "!data.exists() && newData.val() === true" }
+        },
+        "$outro": { ".validate": false }
+      }
+    },
+    "estatisticas": {
+      ".read": true,
+      ".indexOn": ["escolhas", "gols"],
+      "$jogador": {
+        ".write": "auth != null",
+        "escolhas": { ".validate": "newData.isNumber() && ((!data.exists() && newData.val() <= 6) || (data.exists() && newData.val() >= data.val() && newData.val() <= data.val() + 6))" },
+        "gols": { ".validate": "newData.isNumber() && ((!data.exists() && newData.val() <= 60) || (data.exists() && newData.val() >= data.val() && newData.val() <= data.val() + 60))" },
+        "$outro": { ".validate": false }
+      }
+    }
+  }
+}

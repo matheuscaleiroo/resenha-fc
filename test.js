@@ -213,6 +213,42 @@ assert.equal(O.rodadaCompleta(sala6, 0), false, 'Big Six: humano só fez 1 de 2'
 sala6.participantes.h.picks[1] = { jogador: 'y', slot: 1 };
 assert.equal(O.rodadaCompleta(sala6, 0), true, 'Big Six: os dois fizeram as 2');
 
+// v1.6: onde a reserva pode jogar. Time completo (4-3-3, reserva ATA): banco ou no lugar de um ATA titular.
+const TC = time("C", "c", 75);
+const atas = TC.slots.map((s, i) => (s === "ATA" ? i : -1)).filter(i => i >= 0);
+assert.deepStrictEqual(L.opcoesReserva(TC), [L.RES, ...atas], 'time completo: só a mesma posição');
+// abriu buraco no ZAG: só o buraco (nem o ATA titular pode sair), e continua assim depois de entrar lá
+const zag = TC.slots.indexOf('ZAG');
+TC.escalacao[zag] = null;
+assert.deepStrictEqual(L.opcoesReserva(TC), [L.RES, zag], 'com buraco: só o buraco');
+L.moverReserva(TC, zag);
+assert.equal(TC.escalacao[zag].id, 'c11');
+assert.deepStrictEqual(L.opcoesReserva(TC), [L.RES, zag], 'depois de entrar, mesmas opções');
+assert.equal(L.reservaPadrao(L.novoTime('vazio', '4-3-3')), L.RES);
+assert.deepStrictEqual(L.opcoesReserva(L.novoTime('vazio', '4-3-3')), [L.RES], 'sem reserva: só banco');
+// a sugestão (e os bots) sempre cai numa opção permitida
+for (let k = 0; k < 200; k++) {
+  const t = time('R', 'r', 75, Object.keys(L.FORMACOES)[k % 6]);
+  t.escalacao[L.RES] = j('res', L.POSICOES[k % 5], 80);
+  t.slots.forEach((_, i) => { if (i !== L.RES && Math.random() < 0.15) t.escalacao[i] = null; });
+  assert.ok(L.opcoesReserva(t).includes(L.reservaPadrao(t)), 'reservaPadrao fora das opções');
+}
+
+// v1.6: moedas por colocação; 6º só com ponto; local só 1 pessoa + 2 bots ou mais; online 3+
+assert.deepStrictEqual([1, 2, 3, 4, 5].map(l => O.premioDaColocacao(l, 0)), [10, 5, 4, 3, 2]);
+assert.equal(O.premioDaColocacao(6, 0), 0);
+assert.equal(O.premioDaColocacao(6, 1), 1);
+assert.equal(O.valeMoedasLocal([{ bot: null }, { bot: 'facil' }]), false, '1 contra 1 bot não vale');
+assert.equal(O.valeMoedasLocal([{ bot: null }, { bot: 'facil' }, { bot: 'medio' }]), true);
+assert.equal(O.valeMoedasLocal([{ bot: null }, { bot: null }, { bot: 'medio' }]), false, '2 pessoas no aparelho não vale');
+assert.equal(O.valeMoedasOnline({ participantes: { a: {}, b: {} } }), false);
+assert.equal(O.valeMoedasOnline({ participantes: { a: {}, b: {}, c: {} } }), true);
+assert.ok(['abc', 'Matheus_10'].every(u => O.USUARIO_OK.test(u)) && !['ab', 'com espaço', 'joão'].some(u => O.USUARIO_OK.test(u)));
+assert.equal(O.emailDoUsuario('Matheus'), 'matheus@resenhafc.invalid');
+assert.equal(O.chaveJogador('X:Jr. A/B'), 'X:Jr_ A_B');
+const regras = JSON.parse(fs.readFileSync(__dirname + '/database.rules.json', 'utf8'));   // JSON válido pra colar no console
+assert.ok(regras.rules.usuarios.$uid['.write'] && regras.rules.salas);
+
 // versão: a do index.html (única fonte) tem que ser a primeira do CHANGELOG.md — é dali que o jogo lê as novidades
 const versaoHtml = fs.readFileSync(__dirname + '/index.html', 'utf8').match(/const VERSAO = '([^']+)'/)[1];
 const versaoLog = fs.readFileSync(__dirname + '/CHANGELOG.md', 'utf8').match(/^## (\S+)/m)[1];

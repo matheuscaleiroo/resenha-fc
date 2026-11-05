@@ -88,10 +88,26 @@ const rodadaCompleta = (sala, rodada) => Object.values(sala.participantes).every
 // calculado na hora de montar os jogos, sem precisar gravar nada na sala).
 const taticaCompleta = sala => Object.values(sala.participantes).every(p => p.bot || p.taticaPronto);
 
+// ---------- moedas (v1.6) ----------
+// Duas moedas porque no futuro valem coisas diferentes: 🪙 moedas (local, contra bots) e 💎 diamantes
+// (online). Campeonato com 3+ participantes; no local só vale 1 pessoa (a da conta) + 2 ou mais bots.
+// Prêmio pela colocação; o 6º só ganha se fez pelo menos 1 ponto.
+const PREMIO = [10, 5, 4, 3, 2, 1];
+const premioDaColocacao = (lugar, pontos) => (lugar === 6 && pontos < 1 ? 0 : PREMIO[lugar - 1] ?? 0);
+const valeMoedasLocal = times => times.length >= 3 && times.filter(t => !t.bot).length === 1;
+const valeMoedasOnline = sala => Object.keys(sala.participantes || {}).length >= 3;
+
+// Conta = só usuário e senha. Por baixo é o login por e-mail do Firebase Auth (a senha nunca passa pelo
+// banco) com um e-mail de mentira; .invalid é um domínio reservado que nunca existe de verdade.
+const USUARIO_OK = /^[A-Za-z0-9_]{3,16}$/;
+const emailDoUsuario = u => `${u.toLowerCase()}@resenhafc.invalid`;
+// Chave no Firebase não aceita . # $ [ ] / — id de jogador vira chave trocando esses por _.
+const chaveJogador = id => id.replace(/[.#$[\]/]/g, '_');
+
 if (typeof module !== 'undefined') module.exports = {
   MODOS, modoDe, CLUBE, indicePick, picksDaRodada, picksDoBotNoClube, fezRodada,
   meuId, gerarCodigo, jogadorPorId, timeDaSala, draftarBotOnline, rodadaCompleta, taticaCompleta,
-  lerPref, salvarPref,
+  lerPref, salvarPref, premioDaColocacao, valeMoedasLocal, valeMoedasOnline, USUARIO_OK, emailDoUsuario, chaveJogador,
 };
 
 // ---------- Firebase (só existe no navegador, com o SDK carregado) ----------
@@ -178,3 +194,75 @@ const iniciarJogosOnline = (codigo, jogosOrdem) =>
 const avancarJogoOnline = (codigo, i) => conectarFirebase().ref(`salas/${codigo}/jogoAtual`).set(i);
 
 const finalizarOnline = codigo => conectarFirebase().ref(`salas/${codigo}/estado`).set('fim');
+
+// ---------- conta, moedas e ranking (v1.6) ----------
+// usuarios/{uid}: perfil público (nome, moedas, vitórias...). Só o dono escreve, e as regras do banco
+// (database.rules.json) só deixam os números subirem um tanto por vez. ponytail: sem servidor, quem
+// mexer no código consegue se dar prêmio repetido; à prova de trapaça = Cloud Functions (plano Blaze).
+const PERFIL_NOVO = { moedasLocal: 0, moedasOnline: 0, vitorias: 0, titulos: 0, jogos: 0 };
+const ERROS_CONTA = {
+  'auth/email-already-in-use': 'Esse usuário já existe. Escolha outro ou entre com a senha.',
+  'auth/invalid-credential': 'Usuário ou senha errados.', 'auth/wrong-password': 'Usuário ou senha errados.',
+  'auth/user-not-found': 'Usuário ou senha errados.', 'auth/invalid-login-credentials': 'Usuário ou senha errados.',
+  'auth/weak-password': 'A senha precisa ter pelo menos 6 caracteres.',
+  'auth/too-many-requests': 'Muitas tentativas. Espera um pouco e tenta de novo.',
+  'auth/network-request-failed': 'Sem internet agora.',
+  'auth/operation-not-allowed': 'O cadastro ainda não foi ativado no Firebase (ver DECISOES.md).',
+  'auth/configuration-not-found': 'O cadastro ainda não foi ativado no Firebase (ver DECISOES.md).',
+};
+const erroConta = e => new Error(ERROS_CONTA[e.code] || e.message);
+
+async function criarConta(usuario, senha) {
+  if (!USUARIO_OK.test(usuario)) throw new Error('Usuário: de 3 a 16 letras, números ou _ (sem espaço nem acento).');
+  conectarFirebase();
+  let cred;
+  try { cred = await firebase.auth().createUserWithEmailAndPassword(emailDoUsuario(usuario), senha); } catch (e) { throw erroConta(e); }
+  await dbOnline.ref(`usuarios/${cred.user.uid}`).set({ nome: usuario, ...PERFIL_NOVO });
+}
+async function entrarConta(usuario, senha) {
+  conectarFirebase();
+  try { await firebase.auth().signInWithEmailAndPassword(emailDoUsuario(usuario), senha); } catch (e) { throw erroConta(e); }
+}
+const sairConta = () => firebase.auth().signOut();
+
+// cb(usuario do Auth ou null, perfil ou null) toda vez que muda o login ou o perfil
+function ouvirConta(cb) {
+  conectarFirebase();
+  let desligarPerfil = () => {};
+  firebase.auth().onAuthStateChanged(u => {
+    desligarPerfil();
+    if (!u) return cb(null, null);
+    const ref = dbOnline.ref(`usuarios/${u.uid}`);
+    const f = ref.on('value', s => cb(u, s.val()));
+    desligarPerfil = () => ref.off('value', f);
+  });
+}
+
+// Soma no perfil num update só. salaId marca o prêmio como recebido (as regras recusam marcar duas vezes),
+// então recarregar a tela final não paga de novo.
+function premiarConta(uid, ganhos, salaId) {
+  const inc = firebase.database.ServerValue.increment;
+  const upd = Object.fromEntries(Object.entries(ganhos).filter(([, v]) => v > 0).map(([k, v]) => [k, inc(v)]));
+  if (salaId) upd[`premiadas/${salaId}`] = true;
+  return dbOnline.ref(`usuarios/${uid}`).update(upd);
+}
+
+// Estatística dos jogadores de futebol (só online): escolhas (das pessoas, não dos bots) e gols.
+// A 1ª pessoa logada a chegar na tela final "pega" a sala numa transação e grava; ninguém conta duas vezes.
+async function contabilizarSalaOnline(codigo, escolhas, gols) {
+  const { committed } = await dbOnline.ref(`salas/${codigo}/contabilizada`).transaction(v => (v ? undefined : true));
+  if (!committed) return;
+  const inc = firebase.database.ServerValue.increment, upd = {};
+  Object.entries(escolhas).forEach(([id, n]) => { upd[`${chaveJogador(id)}/escolhas`] = inc(n); });
+  Object.entries(gols).forEach(([id, n]) => { upd[`${chaveJogador(id)}/gols`] = inc(n); });
+  if (Object.keys(upd).length) await dbOnline.ref('estatisticas').update(upd);
+}
+
+// Top 20 de um nó ordenado por um campo, do maior pro menor: [{ chave, ...valores }]
+async function topRanking(no, campo) {
+  conectarFirebase();
+  const snap = await dbOnline.ref(no).orderByChild(campo).limitToLast(20).once('value');
+  const lista = [];
+  snap.forEach(s => { lista.push({ chave: s.key, ...s.val() }); });
+  return lista.reverse().filter(x => x[campo] > 0);
+}

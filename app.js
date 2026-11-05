@@ -111,6 +111,8 @@ const cartaoClube = id =>
   `<div class="clube"><div class="escudo" style="border-bottom-color:${CLUBE[id].bg}"><img src="${CLUBE[id].escudo}" alt=""></div>${CLUBE[id].nome}</div>`;
 const nomeTime = t => `${t.bot ? '🤖 ' : ''}${esc(t.nome)}`;
 const bonusTxt = t => (t.bot && BONUS_BOT[t.bot] ? ` · <span class="bonus">${BONUS_BOT[t.bot] > 0 ? '+' : ''}${BONUS_BOT[t.bot]} de bônus de bot</span>` : '');
+// às cegas (v1.6): overall escondido até o fim, também na revelação, na tática e nos jogos
+const ovrPlacar = (t, oculto) => `OVR ${oculto ? '??' : forca(t).geral}`;
 const taticaTxt = t => ` · ${TATICAS[t.tatica].icone} ${TATICAS[t.tatica].nome}`;
 
 // Artilheiros do campeonato: soma os gols de cada jogador (gol contra tem autor nulo — não conta
@@ -142,23 +144,31 @@ const opcoesTatica = (t, fn) => `<div class="taticas">${Object.entries(TATICAS).
     <span class="tatica-icone">${v.icone}</span><b>${v.nome}${t.tatica === k ? ' <span class="marca">✓ escolhida</span>' : ''}</b><small>${v.dica}</small>
   </button>`).join('')}</div>`;
 
-// Onde a reserva joga: banco ou qualquer posição do campo (buraco aberto ou no lugar de um titular).
-// O overall mostrado já tem a penalidade de fora de posição (matriz PENALIDADE em logic.js).
-function painelReserva(t, fn) {
+// Onde a reserva joga (v1.6, regras em opcoesReserva): abriu buraco → só nos buracos; time completo →
+// só no lugar do titular da mesma posição. Cada opção mostra quanto ele perde ali (−0 na posição dele);
+// o overall só aparece quando não é às cegas.
+function painelReserva(t, fn, oculto) {
   const r = jogadorReserva(t);
   if (!r) return '<p class="dica">Sem reserva no banco (ou ela foi repetida e saiu).</p>';
-  const dono = i => (i === t.reservaEm ? t.escalacao[RES] : t.escalacao[i]);   // quem está no slot sem a reserva
-  const slots = t.slots.map((_, i) => i).filter(i => i !== RES)
-    .sort((x, y) => !!dono(x) - !!dono(y) || penalidade(r.pos, t.slots[x]) - penalidade(r.pos, t.slots[y]) || x - y);
-  const op = (i, pos, ovr, legenda) => `
+  const dono = i => (i === t.reservaEm ? t.escalacao[RES] : t.escalacao[i]);
+  const ops = opcoesReserva(t).filter(i => i !== RES)
+    .sort((x, y) => penalidade(r.pos, t.slots[x]) - penalidade(r.pos, t.slots[y]) || x - y);
+  const buraco = ops.some(i => !dono(i));
+  const op = (i, pos, valor, legenda) => `
     <button class="chip-cobre${(t.reservaEm ?? RES) === i ? ' sel' : ''}" aria-pressed="${(t.reservaEm ?? RES) === i}" onclick="${fn}(${i})">
-      <span class="pos">${pos}</span><b>${ovr}</b><small>${legenda}</small></button>`;
+      <span class="pos">${pos}</span><b>${valor}</b><small>${legenda}</small></button>`;
+  const perda = i => { const p = penalidade(r.pos, t.slots[i]); return p ? `−${p}` : 'sem perda'; };
+  const valor = i => (oculto ? perda(i) : `${r.ovr - penalidade(r.pos, t.slots[i])}`);
+  const legenda = i => [dono(i) ? `sai ${esc(dono(i).nome)}` : 'vaga aberta', oculto ? '' : perda(i)].filter(Boolean).join(' · ');
+  const dica = buraco ? 'Abriu buraco no time: o reserva pode entrar numa posição vazia. Fora da posição dele, perde overall.'
+    : ops.length ? 'Time completo: o reserva só pode trocar com o titular da mesma posição.'
+    : 'Time completo e sem titular da posição dele nessa formação: o reserva fica no banco.';
   return `<div class="banco-cobre">
-    <h3>Reserva: ${esc(r.nome)} ${mini(r.clube)} <small class="dica">${r.pos} · ${r.ovr}</small></h3>
-    <p class="dica">Escolha onde ele joga. Posição parecida (lateral ↔ zagueiro, meia ↔ atacante) perde pouco; linha no gol é desastre.</p>
+    <h3>Reserva: ${esc(r.nome)} ${mini(r.clube)} <small class="dica">${r.pos}${oculto ? '' : ` · ${r.ovr}`}</small></h3>
+    <p class="dica">${dica}</p>
     <div class="cobre-opcoes">
       ${op(RES, 'Banco', '—', 'fica de fora')}
-      ${slots.map(i => op(i, t.slots[i], r.ovr - penalidade(r.pos, t.slots[i]), dono(i) ? `sai ${esc(dono(i).nome)} (${dono(i).ovr})` : 'vaga aberta')).join('')}
+      ${ops.map(i => op(i, t.slots[i], valor(i), legenda(i))).join('')}
     </div></div>`;
 }
 
@@ -167,7 +177,7 @@ function campo(t, oculto) {
     const j = t.escalacao[i];
     if (!j) return `<div class="chip vazio"><span class="pos">${t.slots[i]}</span><b>—</b></div>`;
     const fora = i !== RES && j.pos !== t.slots[i];
-    const ovr = oculto ? '??' : fora ? `${ovrEfetivo(t, i)} <s>${j.ovr}</s>` : j.ovr;
+    const ovr = oculto ? (fora ? `?? −${penalidade(j.pos, t.slots[i])}` : '??') : fora ? `${ovrEfetivo(t, i)} <s>${j.ovr}</s>` : j.ovr;
     const entrou = i !== RES && i === t.reservaEm ? ' ↺' : '';   // reserva que entrou em campo
     return `<div class="chip${fora ? ' fora' : ''}" ${fora ? `title="${j.pos} jogando de ${t.slots[i]}: −${penalidade(j.pos, t.slots[i])}"` : ''}>
       <span class="pos">${t.slots[i]}${fora ? ` ⚠ ${j.pos}` : ''}${entrou}</span><b>${esc(j.nome)}</b><span class="meta">${mini(j.clube)} ${ovr}</span></div>`;
@@ -196,9 +206,98 @@ function telaMenu() {
       <button class="op" onclick="telaModo('big6')"><b>${bandeira('eng')}<span>BIG SIX</span></b><small>6 grandes da Inglaterra · 2 por clube</small></button>
       <button class="op" disabled><b>EM BREVE</b><small>novos modos vindo aí</small></button>
     </nav>
-    <button class="link-novidades" onclick="abrirNovidades()">★ NOVIDADES DA ${serie(VERSAO)}</button>
+    <div class="menu-extra">
+      <button class="link-novidades" onclick="telaConta()">${CONTA.perfil ? `👤 ${esc(CONTA.perfil.nome)} · 🪙 ${CONTA.perfil.moedasLocal} · 💎 ${CONTA.perfil.moedasOnline}` : '👤 ENTRAR / CRIAR CONTA'}</button>
+      <button class="link-novidades" onclick="telaRanking()">🏆 RANKING</button>
+      <button class="link-novidades" onclick="abrirNovidades()">★ NOVIDADES DA ${serie(VERSAO)}</button>
+    </div>
     <p class="copy">© ${new Date().getFullYear()} RESENHA FC<br>LICENCIADO PELA RESENHA</p>
   </section>`;
+}
+
+// ---------- conta, moedas e ranking (v1.6; Firebase em online.js) ----------
+// Conta é opcional: sem ela tudo funciona igual, só não ganha moeda nem entra no ranking.
+let CONTA = { user: null, perfil: null };
+function iniciarConta() {
+  try {
+    ouvirConta((user, perfil) => {
+      CONTA = { user, perfil };
+      if ($app.querySelector('.tv')) telaMenu();
+      else if ($app.querySelector('.tela-conta')) telaConta();
+    });
+  } catch {}   // sem internet / abrindo do disco sem o SDK: segue sem conta
+}
+
+function telaConta(erro = '') {
+  const p = CONTA.perfil;
+  $app.innerHTML = p ? `
+  <section class="tela tela-conta">
+    <button class="voltar" onclick="telaMenu()">← Menu</button>
+    <h2>👤 ${esc(p.nome)}</h2>
+    <div class="saldo"><div><b>🪙 ${p.moedasLocal}</b><small>moedas (contra bots)</small></div><div><b>💎 ${p.moedasOnline}</b><small>diamantes (online)</small></div></div>
+    <p>Online: <b>${p.titulos}</b> títulos · <b>${p.vitorias}</b> vitórias · <b>${p.jogos}</b> campeonatos</p>
+    ${comoGanhar}
+    <div class="acoes"><button class="btn sec" onclick="telaRanking()">🏆 Ranking</button><button class="btn sec" onclick="sairConta()">Sair da conta</button></div>
+  </section>` : `
+  <section class="tela tela-conta">
+    <button class="voltar" onclick="telaMenu()">← Menu</button>
+    <h2>👤 Conta</h2>
+    <p class="dica">Só usuário e senha. Com conta você junta moedas e entra no ranking. Sem conta dá pra jogar normal.</p>
+    <div class="nomes">
+      <input id="cUsuario" maxlength="16" placeholder="Usuário" autocomplete="username" value="${esc(lerPref('nomeOnline') || '')}">
+      <input id="cSenha" type="password" placeholder="Senha (mín. 6)" autocomplete="current-password">
+    </div>
+    <p class="dica" id="cErro">${erro ? '⚠ ' + esc(erro) : ''}</p>
+    <div class="acoes"><button class="btn" id="cEntrar" onclick="contaClique(entrarConta)">Entrar</button><button class="btn sec" id="cCriar" onclick="contaClique(criarConta)">Criar conta</button></div>
+    ${comoGanhar}
+  </section>`;
+}
+const comoGanhar = `<details class="dica"><summary>Como ganhar</summary>
+  Campeonato com 3 ou mais times. Por colocação: 1º 10 · 2º 5 · 3º 4 · 4º 3 · 5º 2 · 6º 1 (se fez ponto).
+  <b>🪙 Moedas</b>: no local, só você contra 2 ou mais bots (com mais gente no aparelho não vale).
+  <b>💎 Diamantes</b>: no online. Vitórias e títulos do online contam pro ranking.</details>`;
+async function contaClique(acao) {
+  const u = $('cUsuario').value.trim(), s = $('cSenha').value;
+  $('cEntrar').disabled = $('cCriar').disabled = true;
+  try { await acao(u, s); salvarPref('nomeOnline', u); }   // ouvirConta redesenha quando o perfil chegar
+  catch (e) { telaConta(e.message); }
+}
+
+// Só online. Jogadores de futebol: chave do Firebase → jogador do data.js (quem saiu do elenco some).
+async function telaRanking(aba = 'vitorias') {
+  const ABAS = { vitorias: '👤 Vitórias', escolhas: '🎯 Mais escolhidos', gols: '⚽ Artilheiros' };
+  $app.innerHTML = `
+  <section class="tela">
+    <button class="voltar" onclick="telaMenu()">← Menu</button>
+    <h2>🏆 Ranking do online</h2>
+    <div class="formacoes">${Object.entries(ABAS).map(([k, v]) =>
+      `<button class="btn${k === aba ? '' : ' sec'}" aria-pressed="${k === aba}" onclick="telaRanking('${k}')">${v}</button>`).join('')}</div>
+    <div id="rLista"><p class="dica">Carregando…</p></div>
+  </section>`;
+  let html;
+  try {
+    if (aba === 'vitorias') {
+      const l = await topRanking('usuarios', 'vitorias');
+      html = l.length ? `<div class="tabela"><table><tr><th>#</th><th>Jogador</th><th>Vitórias</th><th>Títulos</th></tr>
+        ${l.map((x, k) => `<tr><td>${k + 1}</td><td>${esc(x.nome)}</td><td><b>${x.vitorias}</b></td><td>${x.titulos}</td></tr>`).join('')}</table></div>` : '';
+    } else {
+      const porChave = Object.fromEntries(Object.values(CLUBE).flatMap(c => c.jogadores).map(j => [chaveJogador(j.id), j]));
+      const l = (await topRanking('estatisticas', aba)).filter(x => porChave[x.chave]);
+      html = l.length ? `<div class="tabela"><table><tr><th>#</th><th>Jogador</th><th>${aba === 'gols' ? 'Gols' : 'Escolhas'}</th></tr>
+        ${l.map((x, k) => { const j = porChave[x.chave]; return `<tr><td>${k + 1}</td><td>${mini(j.clube)} ${esc(j.nome)}</td><td><b>${x[aba]}</b></td></tr>`; }).join('')}</table></div>` : '';
+    }
+    html ||= '<p class="dica">Ninguém aqui ainda. Bora jogar online!</p>';
+  } catch { html = '<p class="dica">⚠ Não consegui carregar o ranking (precisa de internet).</p>'; }
+  if ($('rLista')) $('rLista').innerHTML = html;
+}
+
+// Paga a colocação do campeonato no perfil e mostra no elemento #premio da tela final.
+// salaId marca como pago (regra do banco recusa a 2ª vez); erro = sem internet, regra antiga etc.
+async function pagarPremio(ganhos, salaId, texto) {
+  try {
+    await premiarConta(CONTA.user.uid, ganhos, salaId);
+    if ($('premio') && texto) $('premio').textContent = texto;
+  } catch { if ($('premio')) $('premio').textContent = '⚠ Não consegui salvar o prêmio na sua conta.'; }
 }
 
 // Menu navegável no teclado como nos consoles: ← → movem o cursor ▶, Enter/Espaço escolhem.
@@ -432,7 +531,7 @@ function telaCriarSala(nomeAtual) {
   SO.formacao ??= '4-3-3';
   SO.cego ??= opcoes.cego;
   SO.velocidade ??= opcoes.velocidade;
-  const nome = nomeAtual ?? lerPref('nomeOnline') ?? '';
+  const nome = nomeAtual ?? CONTA.perfil?.nome ?? lerPref('nomeOnline') ?? '';
   $app.innerHTML = `
   <section class="tela">
     <button class="voltar" onclick="telaOnlineMenu()">← Online</button>
@@ -486,7 +585,7 @@ function copiarCodigoClique(codigo) {
 }
 
 function telaEntrarSala(codigoAtual, nomeAtual) {
-  const codigo = codigoAtual ?? '', nome = nomeAtual ?? lerPref('nomeOnline') ?? '';
+  const codigo = codigoAtual ?? '', nome = nomeAtual ?? CONTA.perfil?.nome ?? lerPref('nomeOnline') ?? '';
   $app.innerHTML = `
   <section class="tela">
     <button class="voltar" onclick="telaOnlineMenu()">← Online</button>
@@ -682,7 +781,7 @@ function telaRevelacaoOnline() {
       <div class="carta${conta[x.pick.jogador] > 1 ? ' repetido' : ''}" style="animation-delay:${k * passo}s">
         <small>${x.p.bot ? '🤖 ' : ''}${esc(x.p.nome)}</small>
         <b>${esc(j.nome)}</b>
-        <span>${x.pick.slot === RES ? 'Banco' : slotsFormacao[x.pick.slot]} · ${j.ovr}</span>
+        <span>${x.pick.slot === RES ? 'Banco' : slotsFormacao[x.pick.slot]}${sala.cego ? '' : ` · ${j.ovr}`}</span>
         ${conta[x.pick.jogador] > 1 ? `<em style="animation-delay:${picks.length * passo}s">REPETIDO</em>` : ''}
       </div>`; }).join('')}</div>
     <p class="veredito" style="animation-delay:${picks.length * passo}s">${bateu ? '💥 Bateram! Ninguém leva.' : 'Cada um na sua.'}</p>
@@ -709,8 +808,8 @@ function telaEscolhaTaticaOnline() {
   <section class="tela">
     <h2>${esc(meu.nome)}: qual vai ser a postura?</h2>
     ${opcoesTatica(meu, 'escolherTaticaOnline')}
-    ${painelReserva(meu, 'escolherReservaOnline')}
-    ${placa(meu)}${campo(meu)}
+    ${painelReserva(meu, 'escolherReservaOnline', SO.sala.cego)}
+    ${placa(meu, SO.sala.cego)}${campo(meu, SO.sala.cego)}
     <button class="btn" onclick="confirmarTaticaOnline()">Confirmar e esperar os outros</button>
   </section>`;
 }
@@ -758,7 +857,11 @@ function montarTimesOnline(sala) {
   const todos = Object.values(times);
   resolverDuplicados(todos);
   // reserva: onde a pessoa mandou na tela de tática; sem escolha gravada (bots), o buraco que dói menos
-  todos.forEach(t => moverReserva(t, sala.participantes[t._id].reservaEm ?? reservaPadrao(t)));
+  // (escolha fora das regras da 1.6 — sala antiga — cai na sugestão)
+  todos.forEach(t => {
+    const em = sala.participantes[t._id].reservaEm;
+    moverReserva(t, opcoesReserva(t).includes(em) ? em : reservaPadrao(t));
+  });
   todos.forEach(t => { if (t.bot) t.tatica = taticaDoBot(t, todos); });
   return times;
 }
@@ -774,9 +877,9 @@ function telaJogoOnline() {
   <section class="tela">
     <p class="dica">Sala ${esc(SO.codigo)} · ${sala.jogosOrdem.length > 1 ? `Jogo ${sala.jogoAtual + 1} de ${sala.jogosOrdem.length}` : 'Grande final'}</p>
     <div class="placar">
-      <div class="lado">${nomeTime(a)}<small>OVR ${forca(a).geral}${bonusTxt(a)}${taticaTxt(a)}</small></div>
+      <div class="lado">${nomeTime(a)}<small>${ovrPlacar(a, sala.cego)}${bonusTxt(a)}${taticaTxt(a)}</small></div>
       <div class="gols"><span id="g0">0</span> × <span id="g1">0</span><small id="min">0'</small></div>
-      <div class="lado">${nomeTime(b)}<small>OVR ${forca(b).geral}${bonusTxt(b)}${taticaTxt(b)}</small></div>
+      <div class="lado">${nomeTime(b)}<small>${ovrPlacar(b, sala.cego)}${bonusTxt(b)}${taticaTxt(b)}</small></div>
     </div>
     <div class="acoes" id="fim"><button class="btn sec" id="pular">Pular</button></div>
     <ol class="lances" id="lances"></ol>
@@ -808,6 +911,25 @@ function telaJogoOnline() {
 async function proximoJogoClique() { await avancarJogoOnline(SO.codigo, SO.sala.jogoAtual + 1); }
 async function finalizarClique() { await finalizarOnline(SO.codigo); }
 
+// Fim do online com conta: 💎 pela colocação (3+ participantes) + vitórias, título e campeonato pro
+// ranking; e a 1ª pessoa logada grava escolhas e gols dos jogadores de futebol. Uma vez por sala.
+function premioOnline(sala, tab, porId, campeaoId, artilheiros) {
+  const salaId = `${SO.codigo}-${sala.criada}`;   // código de 4 letras se repete com o tempo; com a data, não
+  if (SO.premiada === salaId) return;
+  SO.textoPremio = '';
+  if (!CONTA.user) return;
+  SO.premiada = salaId;
+  const eu = porId[meuId()], lugar = tab.indexOf(eu) + 1;
+  const n = valeMoedasOnline(sala) ? premioDaColocacao(lugar, eu.p) : 0;
+  SO.textoPremio = n ? `+ 💎 ${n} pelo ${lugar}º lugar!` : '';
+  pagarPremio({ moedasOnline: n, vitorias: eu.v, titulos: campeaoId === meuId() ? 1 : 0, jogos: 1 }, salaId, SO.textoPremio);
+  const escolhas = {}, gols = {};
+  Object.values(sala.participantes).filter(p => !p.bot)
+    .forEach(p => Object.values(p.picks || {}).forEach(k => { escolhas[k.jogador] = (escolhas[k.jogador] || 0) + 1; }));
+  Object.values(artilheiros).forEach(x => { gols[x.jogador.id] = x.gols; });
+  contabilizarSalaOnline(SO.codigo, escolhas, gols).catch(() => {});
+}
+
 function telaFinalOnline() {
   clearInterval(relogio);
   const sala = SO.sala, times = montarTimesOnline(sala);
@@ -822,9 +944,9 @@ function telaFinalOnline() {
     ultimoResultado = { ia, ib, r: rk };
   });
   const tab = [...tabela].sort((x, y) => y.p - x.p || (y.gp - y.gc) - (x.gp - x.gc) || y.gp - x.gp);
-  const campeao = sala.jogosOrdem.length === 1
-    ? nomeTime(times[[ultimoResultado.ia, ultimoResultado.ib][ultimoResultado.r.vencedor]])
-    : tab[0].nome;
+  const campeaoId = sala.jogosOrdem.length === 1 ? [ultimoResultado.ia, ultimoResultado.ib][ultimoResultado.r.vencedor] : tab[0].id;
+  const campeao = nomeTime(times[campeaoId]);
+  premioOnline(sala, tab, porId, campeaoId, artilheiros);
   $app.innerHTML = `
   <section class="tela">
     <div class="campeao"><div class="trofeu" aria-hidden="true">🏆</div><p class="dica">Campeão da resenha</p><h2 class="grande">${campeao}</h2></div>
@@ -833,6 +955,7 @@ function telaFinalOnline() {
       ${tab.map(t => `<tr><td>${t.nome}</td><td><b>${t.p}</b></td><td>${t.j}</td><td>${t.v}</td><td>${t.e}</td><td>${t.d}</td><td>${t.gp - t.gc}</td></tr>`).join('')}
     </table></div>` : ''}
     ${artilheirosHtml(artilheiros)}
+    <p class="premio" id="premio">${SO.textoPremio || ''}</p>
     <div class="acoes">
       <button class="btn" onclick="telaOnlineMenu()">Nova sala</button>
       <button class="btn sec" onclick="telaMenu()">Menu</button>
@@ -872,7 +995,7 @@ function telaRevelaClube() {
       <div class="carta${conta[p.j.id] > 1 ? ' repetido' : ''}" style="animation-delay:${k * passo}s">
         <small>${nomeTime(p.time)}</small>
         <b>${esc(p.j.nome)}</b>
-        <span>${p.slot === RES ? 'Banco' : p.time.slots[p.slot]} · ${p.j.ovr}</span>
+        <span>${p.slot === RES ? 'Banco' : p.time.slots[p.slot]}${opcoes.cego ? '' : ` · ${p.j.ovr}`}</span>
         ${conta[p.j.id] > 1 ? `<em style="animation-delay:${picks.length * passo}s">REPETIDO</em>` : ''}
       </div>`).join('')}</div>
     <p class="veredito" style="animation-delay:${picks.length * passo}s">${bateu ? '💥 Bateram! Ninguém leva.' : 'Cada um na sua.'}</p>
@@ -895,7 +1018,7 @@ function telaTimes() {
           `<li><b>${esc(r.jogador.nome)}</b> ${mini(r.jogador.clube)}: ${r.times.map(esc).join(' e ')}</li>`).join('')}</ul>
           <p class="dica">Quem tinha reserva já aparece com ela (↺) no buraco que dói menos; na tela da tática dá pra mudar.${temFora ? ` <span class="tag-fora">⚠ fora de posição</span> perde overall — quanto mais estranha a posição, mais perde.` : ''}</p></div>`
       : '<p>Ninguém repetiu jogador. Sintonia zero… ou sorte.</p>'}
-    <div class="times">${S.times.map(t => `<div>${placa(t)}${campo(t)}</div>`).join('')}</div>
+    <div class="times">${S.times.map(t => `<div>${placa(t, opcoes.cego)}${campo(t, opcoes.cego)}</div>`).join('')}</div>
     <button class="btn" onclick="telaTatica()">Escolher tática ⚔️</button>
   </section>`;
 }
@@ -930,8 +1053,8 @@ function telaEscolhaTatica() {
   <section class="tela">
     <h2>${esc(t.nome)}: qual vai ser a postura?</h2>
     ${opcoesTatica(t, 'escolherTatica')}
-    ${painelReserva(t, 'escolherReserva')}
-    ${placa(t)}${campo(t)}
+    ${painelReserva(t, 'escolherReserva', opcoes.cego)}
+    ${placa(t, opcoes.cego)}${campo(t, opcoes.cego)}
     <button class="btn" onclick="confirmarTatica()">Confirmar e seguir</button>
   </section>`;
 }
@@ -968,9 +1091,9 @@ function telaPartida() {
   <section class="tela">
     <p class="dica">${S.jogos.length > 1 ? `Jogo ${S.jogoAtual + 1} de ${S.jogos.length}` : 'Grande final'}</p>
     <div class="placar">
-      <div class="lado">${nomeTime(times[0])}<small>OVR ${forca(times[0]).geral}${bonusTxt(times[0])}${taticaTxt(times[0])}</small></div>
+      <div class="lado">${nomeTime(times[0])}<small>${ovrPlacar(times[0], opcoes.cego)}${bonusTxt(times[0])}${taticaTxt(times[0])}</small></div>
       <div class="gols"><span id="g0">0</span> × <span id="g1">0</span><small id="min">0'</small></div>
-      <div class="lado">${nomeTime(times[1])}<small>OVR ${forca(times[1]).geral}${bonusTxt(times[1])}${taticaTxt(times[1])}</small></div>
+      <div class="lado">${nomeTime(times[1])}<small>${ovrPlacar(times[1], opcoes.cego)}${bonusTxt(times[1])}${taticaTxt(times[1])}</small></div>
     </div>
     <div class="acoes" id="fim"><button class="btn sec" id="pular">Pular</button></div>
     <ol class="lances" id="lances"></ol>
@@ -998,6 +1121,18 @@ function telaPartida() {
   $('pular').onclick = () => { while (m < 90) tick(); };
 }
 
+// 🪙 só com 1 pessoa + 2 ou mais bots. Devolve o texto da tela; o pagamento vai em segundo plano.
+function premioLocal(tab) {
+  if (!valeMoedasLocal(S.times)) return '';
+  const h = S.times.findIndex(t => !t.bot), lugar = tab.indexOf(S.tabela[h]) + 1;
+  const n = premioDaColocacao(lugar, S.tabela[h].p);
+  if (!CONTA.user) return n ? `Com conta, esse ${lugar}º lugar valia 🪙 ${n}. Entre pelo menu.` : '';
+  if (!n || S.premiado) return '';
+  S.premiado = true;   // a tela final pode redesenhar: paga uma vez só
+  pagarPremio({ moedasLocal: n }, 'L' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), `+ 🪙 ${n} pelo ${lugar}º lugar!`);
+  return `+ 🪙 ${n} pelo ${lugar}º lugar…`;
+}
+
 function telaFinal() {
   const tab = [...S.tabela].sort((x, y) => y.p - x.p || (y.gp - y.gc) - (x.gp - x.gc) || y.gp - x.gp);
   const { a, b, r } = S.ultimo;
@@ -1010,6 +1145,7 @@ function telaFinal() {
       ${tab.map(t => `<tr><td>${t.nome}</td><td><b>${t.p}</b></td><td>${t.j}</td><td>${t.v}</td><td>${t.e}</td><td>${t.d}</td><td>${t.gp - t.gc}</td></tr>`).join('')}
     </table></div>` : ''}
     ${artilheirosHtml(S.artilheiros)}
+    <p class="premio" id="premio">${premioLocal(tab)}</p>
     <div class="acoes">
       <button class="btn" onclick="iniciar(S.participantes)">Revanche</button>
       <button class="btn sec" onclick="telaMenu()">Menu</button>
@@ -1018,6 +1154,7 @@ function telaFinal() {
 }
 
 telaMenu();
+iniciarConta();
 
 // offline (PWA): só funciona servido por http(s), não abrindo o arquivo direto
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js');
