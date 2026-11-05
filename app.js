@@ -64,14 +64,15 @@ function irProMenu() {
 // 1.4.x), da mais nova pra mais antiga, lidas do próprio arquivo pra não manter o texto em dois
 // lugares. Offline vem do cache do sw.js; abrindo o index.html direto do disco o navegador não deixa
 // ler, e aí só avisa.
+// todas = true mostra o histórico inteiro (botão "Versões antigas").
 const serie = v => v.split('.').slice(0, 2).join('.');
-async function abrirNovidades() {
+async function abrirNovidades(todas = false) {
   abrirJanela(`<h2>★ Novidades</h2><p class="dica">Carregando…</p>`);
   let secoes = [];
   try {
     const md = await (await fetch(`CHANGELOG.md?v=${VERSAO}`)).text();
     secoes = md.split(/^## /m).slice(1).map(s => s.trim().split('\n'))
-      .filter(([titulo]) => serie(titulo.split(/\s/)[0]) === serie(VERSAO));
+      .filter(([titulo]) => todas || serie(titulo.split(/\s/)[0]) === serie(VERSAO));
   } catch {}
   if (!$('janela')) return;
   if (!secoes.length) return abrirJanela('<h2>★ Novidades</h2><p>Não consegui ler as novidades agora. Abra o jogo pelo link (com internet) e tente de novo.</p>');
@@ -84,10 +85,13 @@ async function abrirNovidades() {
       <ul class="novidades">${itens.join('')}</ul></section>`;
   };
   abrirJanela(`
-    <h2>★ Novidades da ${serie(VERSAO)}</h2>
-    <p class="dica">Todas as atualizações da versão ${serie(VERSAO)}, da mais nova pra mais antiga.</p>
+    <h2>★ ${todas ? 'Todas as versões' : `Novidades da ${serie(VERSAO)}`}</h2>
+    <p class="dica">${todas ? 'Tudo que já mudou no jogo' : `Todas as atualizações da versão ${serie(VERSAO)}`}, da mais nova pra mais antiga.</p>
     ${secoes.map(versao).join('')}
-    <div class="acoes"><button class="btn" onclick="fecharJanela()">Bora jogar</button></div>`);
+    <div class="acoes">
+      <button class="btn sec" onclick="abrirNovidades(${!todas})">${todas ? `Só a ${serie(VERSAO)}` : '📜 Versões antigas'}</button>
+      <button class="btn" onclick="fecharJanela()">Bora jogar</button>
+    </div>`);
 }
 
 // ---------- pedaços ----------
@@ -376,16 +380,16 @@ function telaEscolha(sel) {
   if (j) {
     const livres = slotsLivres(t, j.pos);
     const tit = livres.find(i => i !== RES), res = livres.find(i => i === RES);
-    acao = `<div class="acoes">
+    acao = `<div class="acoes acao-fixa">
       ${tit !== undefined ? `<button class="btn" onclick="confirmar(${sel}, ${tit})">Escalar ${esc(j.nome)} (${j.pos})</button>` : ''}
       ${res !== undefined ? `<button class="btn${tit !== undefined ? ' sec' : ''}" onclick="confirmar(${sel}, ${res})">${esc(j.nome)} pro banco</button>` : ''}
-    </div>${res !== undefined ? '<p class="dica">Onde a reserva vai jogar você decide depois da revelação, na tela da tática.</p>' : ''}`;
+    ${res !== undefined ? '<p class="dica">Onde a reserva vai jogar você decide depois da revelação, na tela da tática.</p>' : ''}</div>`;
   }
   $app.innerHTML = `
   <section class="tela">
     ${cabecalhoRodada()}
     <h2>${mini(c.id)} ${esc(t.nome)}: escolha do ${c.nome}${qual}</h2>
-    ${acao}
+    ${j ? '' : acao}
     <div class="escolha">
       <div class="lista">${c.jogadores.map((p, i) => `
         <button class="jogador${i === sel ? ' sel' : ''}${ja.includes(p.id) ? ' meu' : ''}" onclick="telaEscolha(${i})" ${slotsLivres(t, p.pos).length && !ja.includes(p.id) ? '' : 'disabled'}>
@@ -393,6 +397,7 @@ function telaEscolha(sel) {
         </button>`).join('')}</div>
       <div>${placa(t, cego)}${campo(t, cego)}</div>
     </div>
+    ${j ? acao : ''}
   </section>`;
 }
 
@@ -527,7 +532,8 @@ function entrarNaSalaLocal(codigo) {
     const jaFiz = sala.estado === 'draft' ? fezRodada(sala, eu, sala.rodadaAtual)
       : sala.estado === 'tatica' ? (!!eu.bot || !!eu.taticaPronto) : false;
     const naTelaEspera = !!($app.querySelector('.espera-lista') || $app.querySelector('.espera-rodada'));
-    if (mudouFase || mudouRodada || mudouRevel || mudouJogo || (jaFiz && naTelaEspera)) roteirarOnline();
+    // lobby sempre redesenha: é ali que aparece quem acabou de entrar (antes o anfitrião não via)
+    if (sala.estado === 'lobby' || mudouFase || mudouRodada || mudouRevel || mudouJogo || (jaFiz && naTelaEspera)) roteirarOnline();
   });
 }
 
@@ -605,22 +611,23 @@ function telaEscolherRodadaOnline(sel) {
   if (sel != null) {
     const j = c.jogadores[sel], livres = slotsLivres(meuTime, j.pos);
     const tit = livres.find(i => i !== RES), res = livres.find(i => i === RES);
-    acao = `<div class="acoes">
+    acao = `<div class="acoes acao-fixa">
       ${tit !== undefined ? `<button class="btn" onclick="confirmarPickOnline(${sel}, ${tit})">Escalar ${esc(j.nome)} (${j.pos})</button>` : ''}
       ${res !== undefined ? `<button class="btn${tit !== undefined ? ' sec' : ''}" onclick="confirmarPickOnline(${sel}, ${res})">${esc(j.nome)} pro banco</button>` : ''}
-    </div>${res !== undefined ? '<p class="dica">Onde a reserva vai jogar você decide depois da revelação, na tela da tática.</p>' : ''}`;
+    ${res !== undefined ? '<p class="dica">Onde a reserva vai jogar você decide depois da revelação, na tela da tática.</p>' : ''}</div>`;
   }
   $app.innerHTML = `
   <section class="tela">
     <div class="rodada"><span>Sala ${esc(SO.codigo)} · Rodada ${rodada + 1}/${sala.clubesOrdem.length}</span><span>${c.nome}</span></div>
     <h2>${mini(c.id)} Sua escolha do ${c.nome}${qual}</h2>
-    ${acao}
+    ${sel != null ? '' : acao}
     <div class="escolha">
       <div class="lista">${c.jogadores.map((p, i) => `
         <button class="jogador${i === sel ? ' sel' : ''}${ja.includes(p.id) ? ' meu' : ''}" onclick="telaEscolherRodadaOnline(${i})" ${slotsLivres(meuTime, p.pos).length && !ja.includes(p.id) ? '' : 'disabled'}>
           <span class="pos">${p.pos}</span><span class="nome">${esc(p.nome)}</span><span class="ovr">${cego ? '??' : p.ovr}</span></button>`).join('')}</div>
       <div>${placa(meuTime, cego)}${campo(meuTime, cego)}</div>
     </div>
+    ${sel != null ? acao : ''}
   </section>`;
 }
 

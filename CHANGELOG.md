@@ -2,6 +2,11 @@
 
 Resumo do que mudou em cada versão, pra quem joga (não é o histórico técnico — isso fica no `DECISOES.md`).
 
+## 1.5.1 — 2026-11-05
+- **Confirmar a escolha sem rolar a tela**: ao tocar num jogador, os botões "Escalar" / "pro banco" aparecem grudados no pé da tela. Antes ficavam lá em cima e, no celular, era preciso subir a lista inteira.
+- **Correção: sala online**: quem cria a sala agora vê na sala de espera, na hora, cada amigo que entra. Antes só aparecia quem já estava lá quando o anfitrião abriu a tela.
+- **Versões antigas nas novidades**: botão "📜 Versões antigas" mostra tudo que já mudou no jogo, desde a 1.2.
+
 ## 1.5.0 — 2026-10-22
 - **Modo novo: Big Six**. Os 6 grandes da Inglaterra (Arsenal, Manchester City, Manchester United, Chelsea, Tottenham e Liverpool). Mesmo esquema do G12, mas são 6 rodadas e em cada uma você escolhe **2 jogadores** do clube sorteado. Repetiu? Ninguém leva, igual.
 - Funciona no **local** (com bots) e no **online**: quem cria a sala define o modo, e quem entra pelo código já cai no modo certo.

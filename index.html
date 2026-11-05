@@ -177,6 +177,11 @@
   .escolha { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
   @media (max-width: 720px) { .escolha { grid-template-columns: 1fr; } }
   .lista { display: grid; gap: 6px; }
+  /* confirmar a escolha fica grudado no pé da tela: não precisa rolar até o topo depois de tocar no jogador */
+  .acao-fixa { position: sticky; bottom: 0; z-index: 45; margin: 14px -8px 0; padding: 10px 8px calc(10px + env(safe-area-inset-bottom));
+    background: var(--painel); border-top: 3px solid var(--moldura); }
+  .acao-fixa .btn { flex: 1 1 auto; }
+  .acao-fixa .dica { flex-basis: 100%; margin: 0; }
   .jogador { display: grid; grid-template-columns: 44px 1fr auto; align-items: center; gap: 10px; text-align: left;
     background: var(--surface); border: 3px solid var(--border); padding: 9px 12px; }
   .jogador:hover:not(:disabled) { border-color: var(--moldura); }
@@ -302,7 +307,7 @@
   // Versão do jogo: único lugar onde ela é escrita. Aparece no canto da tela e vai no ?v= de cada
   // script — sem isso o navegador reaproveita o .js velho do cache por até 10 min (GitHub Pages manda
   // max-age=600) mesmo com este index.html novo. test.js confere que bate com o topo do CHANGELOG.md.
-  const VERSAO = '1.5.0';
+  const VERSAO = '1.5.1';
   try { const t = localStorage.getItem('tema'); if (t) document.documentElement.dataset.theme = t; } catch {}
   ['data.js', 'data-big6.js', 'logic.js', 'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',
    'https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js', 'firebase-config.js', 'online.js', 'app.js']
