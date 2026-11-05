@@ -307,7 +307,7 @@
   // Versão do jogo: único lugar onde ela é escrita. Aparece no canto da tela e vai no ?v= de cada
   // script — sem isso o navegador reaproveita o .js velho do cache por até 10 min (GitHub Pages manda
   // max-age=600) mesmo com este index.html novo. test.js confere que bate com o topo do CHANGELOG.md.
-  const VERSAO = '1.5.1';
+  const VERSAO = '1.5.2';
   try { const t = localStorage.getItem('tema'); if (t) document.documentElement.dataset.theme = t; } catch {}
   ['data.js', 'data-big6.js', 'logic.js', 'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',
    'https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js', 'firebase-config.js', 'online.js', 'app.js']

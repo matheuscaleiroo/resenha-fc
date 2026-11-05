@@ -2,6 +2,12 @@
 
 Resumo do que mudou em cada versão, pra quem joga (não é o histórico técnico — isso fica no `DECISOES.md`).
 
+## 1.5.2 — 2026-11-05
+- **Elencos completos**: todos os jogadores de cada clube estão no jogo, nos 12 do G12 e nos 6 do Big Six (de 24 a 40 por clube, antes eram 21). Voltaram nomes como Hulk, Germán Cano, Ganso, Soteldo, Maguire, Merino, Rico Lewis, Maddison e Richarlison. Elencos atualizados do Transfermarkt (novembro de 2026).
+- Correção: o Alisson do Fluminense ganhava o overall do Alisson do Liverpool (o ajuste manual era só pelo nome). Agora cada ajuste vale só para o clube certo.
+- O Botafogo tem dois Danilo: o atacante aparece como **Danilo (ATA)**.
+- **Bot Fácil** continua escolhendo no chute, mas só entre os 21 melhores do clube, pra não ficar fraco demais com os garotos da base. O equilíbrio foi conferido em milhares de partidas simuladas e ficou igual ao da 1.5.1.
+
 ## 1.5.1 — 2026-11-05
 - **Confirmar a escolha sem rolar a tela**: ao tocar num jogador, os botões "Escalar" / "pro banco" aparecem grudados no pé da tela. Antes ficavam lá em cima e, no celular, era preciso subir a lista inteira.
 - **Correção: sala online**: quem cria a sala agora vê na sala de espera, na hora, cada amigo que entra. Antes só aparecia quem já estava lá quando o anfitrião abriu a tela.

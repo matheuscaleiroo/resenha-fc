@@ -123,7 +123,8 @@ function disputaPenaltis(rng) {
 // onde o clube é forte). fácil = aleatório; médio = com muito ruído; difícil = evita o craque óbvio
 // (humano vai nele e os dois perdem); impossível = vê as escolhas da rodada:
 // nunca repete sem querer e copia de propósito quando o seu jogador é bem melhor que a opção dele.
-const SABOTAGEM = 0.5;         // impossível copia quando o seu jogador vale isso a mais (overall × peso)
+const FACIL_TOPO = 21;        // fácil chuta entre os 21 melhores do clube (o tamanho do elenco até a 1.5.1)
+const SABOTAGEM = 0.5;        // impossível copia quando o seu jogador vale isso a mais (overall × peso)
 // O draft tem pouco espaço pra habilidade (todos escolhem do mesmo clube), então a dificuldade também
 // vem de um bônus explícito na partida, mostrado na tela.
 const BONUS_BOT = { facil: -1, medio: 1, dificil: 3, impossivel: 6 };  // vs humano realista: bot vence ~11% / 37% / 58% / 80%
@@ -132,7 +133,13 @@ const NIVEIS = { facil: 'Fácil', medio: 'Médio', dificil: 'Difícil', impossiv
 // porClube: quantos jogadores cada clube futuro ainda vai render (G12 = 1, Big Six = 2).
 function escolhaDoBot(t, clube, futuros, nivel, jaEscolhidos = [], rng = Math.random, porClube = 1) {
   const opcoes = clube.jogadores.flatMap(j => slotsLivres(t, j.pos).map(i => ({ j, i })));
-  if (nivel === 'facil') return opcoes[Math.floor(rng() * opcoes.length)];
+  if (nivel === 'facil') {
+    // chute só entre os FACIL_TOPO melhores do clube: com o elenco inteiro (v1.5.2) o chute caía muito no garoto da base
+    const topo = new Set(clube.jogadores.slice().sort((a, b) => b.ovr - a.ovr).slice(0, FACIL_TOPO).map(j => j.id));
+    const boas = opcoes.filter(o => topo.has(o.j.id));
+    const pool = boas.length ? boas : opcoes;
+    return pool[Math.floor(rng() * pool.length)];
+  }
   // referência: com k vagas abertas na posição, o k-ésimo melhor que ainda pode vir dos próximos clubes
   // (cada clube pode render até porClube jogadores dessa posição)
   const vagas = pos => t.slots.filter((p, i) => p === pos && i !== RES && !t.escalacao[i]).length;

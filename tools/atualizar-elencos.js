@@ -46,7 +46,8 @@ const POSICAO = {
   'Volante': 'MEI', 'Meia Central': 'MEI', 'Meia Ofensivo': 'MEI', 'Meia Direita': 'MEI', 'Meia Esquerda': 'MEI',
   'Ponta-Direita': 'ATA', 'Ponta-Esquerda': 'ATA', 'Centroavante': 'ATA', 'Seg. Atacante': 'ATA',
 };
-const MAX_POR_POSICAO = { GOL: 2, LAT: 4, ZAG: 4, MEI: 6, ATA: 5 };
+// Elenco inteiro entra (v1.5.2): antes cortava em 2/4/4/6/5 por posição e sumia gente que joga.
+const ORDEM_POSICOES = ['GOL', 'LAT', 'ZAG', 'MEI', 'ATA'];
 
 // Overall estimado pelo log do valor de mercado + bônus pra veterano (valor despenca com a idade, a
 // bola nem tanto). ponytail: heurística, ajuste os números à mão em AJUSTES se quiser.
@@ -56,13 +57,14 @@ const MAX_POR_POSICAO = { GOL: 2, LAT: 4, ZAG: 4, MEI: 6, ATA: 5 };
 //   Brasil, quase todo mundo da Premier caía entre 85 e 90 (elencos de €30 a €150 mi são bem mais
 //   parecidos entre si), e aí escolher bem quase não fazia diferença. Aqui também tem desconto pra
 //   garoto: o mercado paga pelo futuro (promessa de 16 anos valendo €60 mi), não pelo nível de hoje.
-// Ajuste manual: o valor de mercado não enxerga lenda veterana. Nome exatamente como no Transfermarkt.
+// Ajuste manual: o valor de mercado não enxerga lenda veterana. 'SIGLA:Nome', nome exatamente como no
+// Transfermarkt — com a sigla porque tem xará em outro clube (Alisson do Flu, Emiliano Martínez do Palmeiras).
 const AJUSTES = {
   // G12
-  'Thiago Silva': 79, 'Jonathan Calleri': 78, 'Luciano': 76,
+  'FLU:Thiago Silva': 79, 'SAO:Jonathan Calleri': 78, 'SAO:Luciano': 76,
   // Big Six: veterano e goleiro de elite (o mercado paga pouco por goleiro e por quem passou dos 30)
-  'Virgil van Dijk': 87, 'Alisson': 86, 'Gianluigi Donnarumma': 87, 'Emiliano Martínez': 84,
-  'Bruno Fernandes': 87, 'Andrew Robertson': 80,
+  'LIV:Virgil van Dijk': 87, 'LIV:Alisson': 86, 'MCI:Gianluigi Donnarumma': 87, 'CHE:Emiliano Martínez': 84,
+  'MUN:Bruno Fernandes': 87, 'TOT:Andrew Robertson': 80,
 };
 
 const veterano = idade => Math.min(Math.max(idade - 29, 0) * 0.8, 6);
@@ -72,7 +74,8 @@ const REGUAS = {
     - Math.max(21 - idade, 0) * 1.5, 60), 93),
 };
 let regua = REGUAS.brasil;
-const overall = (euros, idade, nome) => AJUSTES[nome] ?? Math.round(regua(euros, idade));
+let siglaAtual;
+const overall = (euros, idade, nome) => AJUSTES[`${siglaAtual}:${nome}`] ?? Math.round(regua(euros, idade));
 
 function valorEmEuros(txt) {
   const m = txt.match(/€\s*([\d.,]+)\s*(mil|mi)/);
@@ -95,8 +98,11 @@ async function elenco(id, sigla) {
   }).filter(j => j.nome);
   const desconhecidas = [...new Set(jogadores.filter(j => !j.pos).map(j => j.posTxt))];
   if (desconhecidas.length) console.warn(`  ${sigla}: posição ignorada: ${desconhecidas.join(', ')}`);
-  const escolhidos = Object.entries(MAX_POR_POSICAO).flatMap(([pos, max]) =>
-    jogadores.filter(j => j.pos === pos).sort((a, b) => overall(b.euros, b.idade, b.nome) - overall(a.euros, a.idade, a.nome)).slice(0, max));
+  const escolhidos = ORDEM_POSICOES.flatMap(pos =>
+    jogadores.filter(j => j.pos === pos).sort((a, b) => overall(b.euros, b.idade, b.nome) - overall(a.euros, a.idade, a.nome)));
+  // xará no mesmo clube (Botafogo tem dois Danilo): o id do jogador é sigla:nome, então o de menor overall ganha a posição
+  const vistos = new Set();
+  [...escolhidos].sort((a, b) => b.euros - a.euros).forEach(j => { if (vistos.has(j.nome)) j.nome += ` (${j.pos})`; vistos.add(j.nome); });
   return { titulo, total: jogadores.length, escolhidos };
 }
 
@@ -111,6 +117,7 @@ async function gerar(modo) {
   regua = REGUAS[MODOS[modo].regua || 'brasil'];
   const blocos = [];
   for (const [id, sigla, nome, bg] of clubes) {
+    siglaAtual = sigla;
     const { titulo, total, escolhidos } = await elenco(id, sigla);
     await escudo(id, sigla);
     console.log(`${sigla} ← "${titulo}": ${total} no elenco, ${escolhidos.length} no jogo`);
