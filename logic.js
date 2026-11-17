@@ -191,7 +191,7 @@ function taticaDoBot(t, times) {
 
 // Gols por minuto: chance proporcional a ataque de um vs defesa do outro.
 function simular(a, b, mataMata, rng = Math.random) {
-  const bonus = t => BONUS_BOT[t.bot] ?? 0;
+  const bonus = t => (BONUS_BOT[t.bot] ?? 0) + (t.reforco ? 1 : 0);   // reforco: vantagem da loja online (v1.7)
   const fa = forca(a), fb = forca(b);
   // Ataques tendem a ter overall maior que defesas (mercado paga mais por atacante); descontar a
   // diferença média dos dois times deixa ~2,6 gols por jogo e o placar decidido pela diferença entre eles.

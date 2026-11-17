@@ -249,6 +249,68 @@ assert.equal(O.chaveJogador('X:Jr. A/B'), 'X:Jr_ A_B');
 const regras = JSON.parse(fs.readFileSync(__dirname + '/database.rules.json', 'utf8'));   // JSON válido pra colar no console
 assert.ok(regras.rules.usuarios.$uid['.write'] && regras.rules.salas);
 
+assert.ok(regras.rules.usuarios.$uid.itens.$id && regras.rules.usuarios.$uid.equipado.$tipo, 'regras da loja (v1.7)');
+
+// v1.7 loja: ids únicos e curtos (a regra do banco aceita até 20 caracteres em equipado), preço inteiro
+// positivo, e as duas vitrines têm permanentes e consumíveis; toda vantagem de sala é um consumível do online
+assert.equal(new Set(O.LOJA.map(i => i.id)).size, O.LOJA.length, 'item repetido na loja');
+for (const it of O.LOJA) {
+  assert.ok(it.id.length <= 20 && O.CAMPO_MOEDA[it.loja], `${it.id}: id longo ou loja desconhecida`);
+  assert.ok(Number.isInteger(it.preco) && it.preco > 0 && it.nome && it.desc && it.icone, `${it.id}: item incompleto`);
+  assert.ok(it.tipo === 'consumivel' || it.valor, `${it.id}: permanente sem valor`);
+}
+for (const loja of ['local', 'online']) for (const consumivel of [true, false])
+  assert.ok(O.LOJA.some(i => i.loja === loja && (i.tipo === 'consumivel') === consumivel), `loja ${loja} sem ${consumivel ? 'consumível' : 'permanente'}`);
+for (const id of Object.keys(O.VANTAGENS)) assert.ok(O.ITEM[id].loja === 'online' && O.ITEM[id].tipo === 'consumivel', id);
+
+// v1.7 Reforço: +1 na partida. Times iguais, quem tem reforço vence mais; e timeDaSala leva o campo da sala
+const semR = time('S', 's', 75), comR = Object.assign(time('R', 'r', 75), { reforco: true });
+let vR = 0, vS = 0;
+for (let k = 0; k < 8000; k++) { const v = L.simular(comR, semR, false).vencedor; if (v === 0) vR++; else if (v === 1) vS++; }
+assert(vR > vS, `reforço devia vencer mais: ${vR} × ${vS}`);
+assert.equal(O.timeDaSala({ nome: 'x', reforco: true, visual: { cor: 'cor_ouro' } }, '4-3-3').reforco, true);
+assert.equal(O.timeDaSala({ nome: 'x' }, '4-3-3').reforco, false);
+
+// v1.7 cassino: retorno médio exato de cada jogo (a banca sempre leva um pouco, nunca dá lucro certo)
+const K = require('./cassino.js');
+let somaSlot = 0;
+for (let a = 0; a < 6; a++) for (let b = 0; b < 6; b++) for (let c = 0; c < 6; c++) somaSlot += K.multSlot([a, b, c]);
+const rtpSlot = somaSlot / 216;
+assert(rtpSlot > 0.9 && rtpSlot < 0.97, `caça-níquel devolve ${rtpSlot}`);
+assert.equal(K.multSlot([5, 5, 5]), 30);
+assert.equal(K.multSlot([0, 3, 0]), 1, 'par devolve a aposta');
+assert.equal(K.multSlot([0, 1, 2]), 0);
+assert.ok(K.girarSlot(L.rngDe(7)).every(s => s >= 0 && s < 6));
+for (const palpite of [...Object.keys(K.PALPITES), 0, 17, 36]) {
+  let soma = 0;
+  for (let n = 0; n <= 36; n++) soma += K.multRoleta(palpite, n);
+  assert.equal(soma, 36, `roleta ${palpite}: devia devolver 36/37`);
+}
+assert.equal(K.multRoleta('vermelho', 1), 2); assert.equal(K.multRoleta('preto', 1), 0);
+assert.equal(K.multRoleta('par', 0), 0, 'zero não é par na roleta');
+assert.equal(K.multRoleta('d2', 13), 3); assert.equal(K.multRoleta('d2', 25), 0);
+assert.equal(K.multRoleta(17, 17), 36);
+const mao = (...vs) => vs.map(v => ({ v, n: '♠' }));
+assert.equal(K.valorMao(mao('A', 'K')), 21);
+assert.equal(K.valorMao(mao('A', 'A', '9')), 21, 'um ás vale 11 e o outro 1');
+assert.equal(K.valorMao(mao('A', '9', '5')), 15, 'ás vira 1 pra não estourar');
+assert.equal(K.valorMao(mao('10', 'J', 'Q')), 30);
+assert.ok(K.ehBlackjack(mao('A', '10')) && !K.ehBlackjack(mao('7', '7', '7')));
+const baralho = K.novoBaralho(L.rngDe(3));
+assert.equal(new Set(baralho.map(c => c.v + c.n)).size, 52);
+for (let k = 0; k < 200; k++) {
+  const b = K.novoBaralho(L.rngDe(k)), banca = K.jogarBanca([b.pop(), b.pop()], b);
+  assert.ok(K.valorMao(banca) >= 17 && K.valorMao(banca.slice(0, -1)) < 17 || banca.length === 2, 'banca compra até 17 e para');
+}
+assert.equal(K.retornoBJ(mao('10', '9', '5'), mao('10', '7'), 10), 0, 'estourou perde, mesmo se a banca for pior');
+assert.equal(K.retornoBJ(mao('A', 'K'), mao('10', '9'), 10), 25, 'blackjack paga 3:2');
+assert.equal(K.retornoBJ(mao('A', 'K'), mao('A', 'Q'), 10), 10, 'dois blackjacks empatam');
+assert.equal(K.retornoBJ(mao('7', '7', '7'), mao('A', 'K'), 10), 0, '21 com 3 cartas perde pro blackjack');
+assert.equal(K.retornoBJ(mao('10', '9'), mao('10', '6', '8'), 10), 20, 'banca estourou');
+assert.equal(K.retornoBJ(mao('10', '9'), mao('10', '9'), 10), 10);
+assert.equal(K.retornoBJ(mao('10', '8'), mao('10', '9'), 10), 0);
+assert.equal(K.retornoBJ(mao('A', 'K'), mao('10', '9'), 1), 2, 'aposta 1: 3:2 arredonda pra baixo');
+
 // versão: a do index.html (única fonte) tem que ser a primeira do CHANGELOG.md — é dali que o jogo lê as novidades
 const versaoHtml = fs.readFileSync(__dirname + '/index.html', 'utf8').match(/const VERSAO = '([^']+)'/)[1];
 const versaoLog = fs.readFileSync(__dirname + '/CHANGELOG.md', 'utf8').match(/^## (\S+)/m)[1];

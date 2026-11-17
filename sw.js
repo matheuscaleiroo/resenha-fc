@@ -3,7 +3,7 @@
 importScripts('data.js', 'data-big6.js');
 const CACHE = 'resenha';
 const ESSENCIAIS = [
-  './', 'index.html', 'app.js', 'logic.js', 'data.js', 'data-big6.js', 'online.js', 'firebase-config.js', 'manifest.webmanifest', 'CHANGELOG.md',
+  './', 'index.html', 'app.js', 'logic.js', 'data.js', 'data-big6.js', 'online.js', 'cassino.js', 'firebase-config.js', 'manifest.webmanifest', 'CHANGELOG.md',
   'icones/icone-180.png', 'icones/icone-192.png', 'icones/icone-512.png',
   ...[...CLUBES, ...CLUBES_BIG6].map(c => c.escudo),
 ];

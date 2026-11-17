@@ -2,6 +2,12 @@
 
 Resumo do que mudou em cada versão, pra quem joga (não é o histórico técnico — isso fica no `DECISOES.md`).
 
+## 1.7 — 2026-11-17
+- **Loja**, no menu, com duas vitrines que não se misturam. **🪙 Offline**: gramados novos pro jogo (Praia, Neve, Noite Roxa) e ajudas pro modo local, como o **Olheiro** (mostra os overalls do clube no às cegas) e a **Roleta de novo** (sorteia outro clube). **💎 Online**: nome colorido, emblema e título que os outros veem na sala, na tabela e no ranking, e vantagens de sala.
+- **Vantagens do online**: **Reforço** (+1 de força pro seu time num campeonato) e **Olheiro** (você vê os overalls numa sala às cegas). São ativadas na sala de espera, e todo mundo da sala vê quem ativou.
+- **Cassino**, no menu: **caça-níquel**, **roleta** e **blackjack**. Aposta de 1 a 10, com 🪙 ou 💎: apostou moeda, ganha moeda; apostou diamante, ganha diamante. É só com as moedas do jogo: não entra nem sai dinheiro de verdade.
+- Loja e cassino precisam de conta (é onde o saldo fica guardado) e de internet.
+
 ## 1.6.1 — 2026-11-05
 - **Entrar e Criar conta em telas separadas**, com abas no topo, campo de repetir a senha no cadastro, as regras do usuário à vista, aviso de erro em destaque e confirmação de que você entrou.
 - Correção: quem criou a conta antes das regras do banco estarem prontas entrava e a tela não mudava (o perfil nunca tinha sido salvo). Agora o perfil é criado na hora do login.

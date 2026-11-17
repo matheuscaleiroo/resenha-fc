@@ -61,6 +61,8 @@ function timeDaSala(p, formacao, modo) {
   Object.values(p.picks || {}).forEach(pick => { t.escalacao[pick.slot] = jogadorPorId(pick.jogador); });
   t.tatica = p.tatica || 'neutro';
   t.bot = p.bot || null;
+  t.visual = p.visual || null;   // v1.7: cosméticos da loja (ids de ITEM)
+  t.reforco = !!p.reforco;       // v1.7: vantagem ativada na sala de espera (+1 em simular)
   return t;
 }
 
@@ -97,6 +99,36 @@ const premioDaColocacao = (lugar, pontos) => (lugar === 6 && pontos < 1 ? 0 : PR
 const valeMoedasLocal = times => times.length >= 3 && times.filter(t => !t.bot).length === 1;
 const valeMoedasOnline = sala => Object.keys(sala.participantes || {}).length >= 3;
 
+// ---------- loja (v1.7) ----------
+// Duas vitrines que não se misturam: 'local' se paga com 🪙 e 'online' com 💎.
+// tipo 'consumivel' = gasta ao usar (guarda a quantidade); os outros são permanentes e se equipam, um por tipo.
+// O que vai pra sala e pro ranking é só o id do item: quem lê procura aqui, então não dá pra injetar texto.
+const CAMPO_MOEDA = { local: 'moedasLocal', online: 'moedasOnline' };
+const ICONE_MOEDA = { local: '🪙', online: '💎' };
+const LOJA = [
+  { id: 'gramado_praia', loja: 'local', tipo: 'gramado', valor: 'praia', icone: '🏖️', nome: 'Gramado Praia', preco: 40, desc: 'Troca a grama do jogo por areia.' },
+  { id: 'gramado_neve', loja: 'local', tipo: 'gramado', valor: 'neve', icone: '❄️', nome: 'Gramado Neve', preco: 60, desc: 'Campo gelado, pra jogo de inverno.' },
+  { id: 'gramado_roxo', loja: 'local', tipo: 'gramado', valor: 'roxo', icone: '🌌', nome: 'Gramado Noite Roxa', preco: 80, desc: 'Campo roxo de final de campeonato.' },
+  { id: 'olheiro', loja: 'local', tipo: 'consumivel', icone: '🔍', nome: 'Olheiro', preco: 8, desc: 'No modo local às cegas: mostra os overalls do clube da rodada.' },
+  { id: 'roleta', loja: 'local', tipo: 'consumivel', icone: '🔄', nome: 'Roleta de novo', preco: 10, desc: 'No modo local: sorteia outro clube no lugar do que saiu (1 por rodada).' },
+  { id: 'cor_ouro', loja: 'online', tipo: 'cor', valor: '#f5b301', icone: '🟡', nome: 'Nome dourado', preco: 30, desc: 'Seu nome grifado em dourado na sala, na tabela e no ranking.' },
+  { id: 'cor_azul', loja: 'online', tipo: 'cor', valor: '#2f8fff', icone: '🔵', nome: 'Nome azul', preco: 30, desc: 'Seu nome grifado em azul.' },
+  { id: 'cor_rosa', loja: 'online', tipo: 'cor', valor: '#ff4fa3', icone: '🩷', nome: 'Nome rosa', preco: 30, desc: 'Seu nome grifado em rosa.' },
+  { id: 'cor_verde', loja: 'online', tipo: 'cor', valor: '#22c55e', icone: '🟢', nome: 'Nome verde', preco: 30, desc: 'Seu nome grifado em verde.' },
+  { id: 'emb_estrela', loja: 'online', tipo: 'emblema', valor: '⭐', icone: '⭐', nome: 'Emblema Estrela', preco: 40, desc: 'Aparece antes do seu nome.' },
+  { id: 'emb_fogo', loja: 'online', tipo: 'emblema', valor: '🔥', icone: '🔥', nome: 'Emblema Fogo', preco: 40, desc: 'Aparece antes do seu nome.' },
+  { id: 'emb_coroa', loja: 'online', tipo: 'emblema', valor: '👑', icone: '👑', nome: 'Emblema Coroa', preco: 80, desc: 'Aparece antes do seu nome.' },
+  { id: 'emb_bode', loja: 'online', tipo: 'emblema', valor: '🐐', icone: '🐐', nome: 'Emblema GOAT', preco: 120, desc: 'O maior de todos os tempos.' },
+  { id: 'tit_professor', loja: 'online', tipo: 'titulo', valor: 'O Professor', icone: '🎓', nome: 'Título: O Professor', preco: 50, desc: 'Aparece ao lado do seu nome na sala e no ranking.' },
+  { id: 'tit_zebra', loja: 'online', tipo: 'titulo', valor: 'Rei da Zebra', icone: '🦓', nome: 'Título: Rei da Zebra', preco: 50, desc: 'Aparece ao lado do seu nome na sala e no ranking.' },
+  { id: 'tit_quente', loja: 'online', tipo: 'titulo', valor: 'Pé Quente', icone: '🦶', nome: 'Título: Pé Quente', preco: 50, desc: 'Aparece ao lado do seu nome na sala e no ranking.' },
+  { id: 'olheiro_on', loja: 'online', tipo: 'consumivel', icone: '🔍', nome: 'Olheiro', preco: 12, desc: 'Numa sala às cegas: você vê os overalls na hora de escolher, o campeonato todo.' },
+  { id: 'reforco', loja: 'online', tipo: 'consumivel', icone: '⚡', nome: 'Reforço', preco: 15, desc: '+1 de força pro seu time num campeonato online. Todo mundo vê que você usou.' },
+];
+const ITEM = Object.fromEntries(LOJA.map(i => [i.id, i]));
+// Vantagens do online: ativadas na sala de espera, gravadas no participante (campo) pra valer igual em todo aparelho.
+const VANTAGENS = { reforco: 'reforco', olheiro_on: 'olheiro' };
+
 // Conta = só usuário e senha. Por baixo é o login por e-mail do Firebase Auth (a senha nunca passa pelo
 // banco) com um e-mail de mentira; .invalid é um domínio reservado que nunca existe de verdade.
 const USUARIO_OK = /^[A-Za-z0-9_]{3,16}$/;
@@ -108,6 +140,7 @@ if (typeof module !== 'undefined') module.exports = {
   MODOS, modoDe, CLUBE, indicePick, picksDaRodada, picksDoBotNoClube, fezRodada,
   meuId, gerarCodigo, jogadorPorId, timeDaSala, draftarBotOnline, rodadaCompleta, taticaCompleta,
   lerPref, salvarPref, premioDaColocacao, valeMoedasLocal, valeMoedasOnline, USUARIO_OK, emailDoUsuario, chaveJogador,
+  LOJA, ITEM, CAMPO_MOEDA, VANTAGENS,
 };
 
 // ---------- Firebase (só existe no navegador, com o SDK carregado) ----------
@@ -120,7 +153,8 @@ function conectarFirebase() {
   return dbOnline;
 }
 
-async function criarSalaOnline(nome, formacao, cego, velocidade, modo = 'g12') {
+// visual = { cor, emblema, titulo } com ids de ITEM (ou null em cada um; o Firebase não aceita undefined)
+async function criarSalaOnline(nome, formacao, cego, velocidade, modo = 'g12', visual = null) {
   const db = conectarFirebase();
   const codigo = gerarCodigo();
   const id = meuId();
@@ -129,12 +163,12 @@ async function criarSalaOnline(nome, formacao, cego, velocidade, modo = 'g12') {
     criada: Date.now(), modo, formacao, clubesOrdem, semente: novaSemente(), anfitriao: id,
     cego: !!cego, velocidade: velocidade || 'normal',
     estado: 'lobby', rodadaAtual: 0,
-    participantes: { [id]: { nome, bot: null, picks: {}, tatica: null, taticaPronto: false } },
+    participantes: { [id]: { nome, bot: null, picks: {}, tatica: null, taticaPronto: false, visual } },
   });
   return codigo;
 }
 
-async function entrarSalaOnline(codigo, nome) {
+async function entrarSalaOnline(codigo, nome, visual = null) {
   const db = conectarFirebase();
   const ref = db.ref(`salas/${codigo}`);
   const snap = await ref.once('value');
@@ -144,7 +178,7 @@ async function entrarSalaOnline(codigo, nome) {
   const id = meuId();
   if (!sala.participantes[id] && Object.keys(sala.participantes).length >= 6) throw new Error('Essa sala já tem 6 jogadores (o máximo).');
   if (!sala.participantes[id]) {
-    await ref.child(`participantes/${id}`).set({ nome, bot: null, picks: {}, tatica: null, taticaPronto: false });
+    await ref.child(`participantes/${id}`).set({ nome, bot: null, picks: {}, tatica: null, taticaPronto: false, visual });
   }
   return sala;
 }
@@ -249,6 +283,15 @@ function premiarConta(uid, ganhos, salaId) {
   if (salaId) upd[`premiadas/${salaId}`] = true;
   return dbOnline.ref(`usuarios/${uid}`).update(upd);
 }
+
+// v1.7: gastar. Tudo com increment, e as regras do banco recusam saldo ou quantidade abaixo de zero.
+// ponytail: sem servidor, as regras não conferem se o item foi pago (mesmo risco aceito da decisão 43).
+const incr = n => firebase.database.ServerValue.increment(n);
+const moverMoedas = (uid, campo, delta) => dbOnline.ref(`usuarios/${uid}/${campo}`).set(incr(delta));   // aposta: delta < 0 perde
+const comprarItem = (uid, item) => dbOnline.ref(`usuarios/${uid}`).update({ [CAMPO_MOEDA[item.loja]]: incr(-item.preco), [`itens/${item.id}`]: incr(1) });
+const gastarItem = (uid, id) => dbOnline.ref(`usuarios/${uid}/itens/${id}`).set(incr(-1));
+const equiparItem = (uid, tipo, id) => dbOnline.ref(`usuarios/${uid}/equipado/${tipo}`).set(id);   // id null = tirar
+const marcarVantagemOnline = (codigo, campo) => conectarFirebase().ref(`salas/${codigo}/participantes/${meuId()}/${campo}`).set(true);
 
 // Estatística dos jogadores de futebol (só online): escolhas (das pessoas, não dos bots) e gols.
 // A 1ª pessoa logada a chegar na tela final "pega" a sala numa transação e grava; ninguém conta duas vezes.

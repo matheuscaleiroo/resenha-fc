@@ -10,8 +10,14 @@
         ".write": "auth != null && auth.uid === $uid",
         ".validate": "newData.child('nome').isString() && newData.child('nome').val().toLowerCase() + '@resenhafc.invalid' === auth.token.email",
         "nome": { ".validate": "!data.exists() || newData.val() === data.val()" },
-        "moedasLocal": { ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === 0) || (data.exists() && newData.val() >= data.val() && newData.val() <= data.val() + 10))" },
-        "moedasOnline": { ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === 0) || (data.exists() && newData.val() >= data.val() && newData.val() <= data.val() + 10))" },
+        "moedasLocal": { ".validate": "newData.isNumber() && newData.val() >= 0 && ((!data.exists() && newData.val() === 0) || (data.exists() && newData.val() <= data.val() + 400))" },
+        "moedasOnline": { ".validate": "newData.isNumber() && newData.val() >= 0 && ((!data.exists() && newData.val() === 0) || (data.exists() && newData.val() <= data.val() + 400))" },
+        "itens": {
+          "$id": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 99" }
+        },
+        "equipado": {
+          "$tipo": { ".validate": "newData.isString() && newData.val().length <= 20" }
+        },
         "vitorias": { ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === 0) || (data.exists() && newData.val() >= data.val() && newData.val() <= data.val() + 5))" },
         "titulos": { ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === 0) || (data.exists() && newData.val() >= data.val() && newData.val() <= data.val() + 1))" },
         "jogos": { ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === 0) || (data.exists() && newData.val() >= data.val() && newData.val() <= data.val() + 1))" },

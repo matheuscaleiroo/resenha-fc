@@ -109,8 +109,17 @@ const bandeira = cod => `<svg class="bandeira" viewBox="0 0 28 20" aria-hidden="
 const mini = id => `<img class="mini" src="${CLUBE[id].escudo}" alt="${CLUBE[id].nome}" title="${CLUBE[id].nome}">`;
 const cartaoClube = id =>
   `<div class="clube"><div class="escudo" style="border-bottom-color:${CLUBE[id].bg}"><img src="${CLUBE[id].escudo}" alt=""></div>${CLUBE[id].nome}</div>`;
-const nomeTime = t => `${t.bot ? '🤖 ' : ''}${esc(t.nome)}`;
-const bonusTxt = t => (t.bot && BONUS_BOT[t.bot] ? ` · <span class="bonus">${BONUS_BOT[t.bot] > 0 ? '+' : ''}${BONUS_BOT[t.bot]} de bônus de bot</span>` : '');
+// Cosméticos da loja online (v1.7): v = { cor, emblema, titulo } com ids de ITEM. Id desconhecido ou de
+// outro tipo é ignorado, então o que vem da sala (que qualquer um escreve) nunca vira HTML.
+const doTipo = (id, tipo) => (ITEM[id]?.tipo === tipo ? ITEM[id].valor : '');
+const nomeEnfeitado = (nome, v) => {
+  const cor = doTipo(v?.cor, 'cor'), emb = doTipo(v?.emblema, 'emblema');
+  return `${emb ? emb + ' ' : ''}${cor ? `<span class="nome-cor" style="--cor:${cor}">${esc(nome)}</span>` : esc(nome)}`;
+};
+const tituloDe = v => (doTipo(v?.titulo, 'titulo') ? ` <small class="dica">${doTipo(v.titulo, 'titulo')}</small>` : '');
+const nomeTime = t => `${t.bot ? '🤖 ' : ''}${nomeEnfeitado(t.nome, t.visual)}`;
+const bonusTxt = t => (t.bot && BONUS_BOT[t.bot] ? ` · <span class="bonus">${BONUS_BOT[t.bot] > 0 ? '+' : ''}${BONUS_BOT[t.bot]} de bônus de bot</span>` : '')
+  + (t.reforco ? ' · <span class="bonus">⚡ +1 de reforço</span>' : '');
 // às cegas (v1.6): overall escondido até o fim, também na revelação, na tática e nos jogos
 const ovrPlacar = (t, oculto) => `OVR ${oculto ? '??' : forca(t).geral}`;
 const taticaTxt = t => ` · ${TATICAS[t.tatica].icone} ${TATICAS[t.tatica].nome}`;
@@ -208,6 +217,8 @@ function telaMenu() {
     </nav>
     <div class="menu-extra">
       <button class="link-novidades" onclick="telaConta()">${CONTA.perfil ? `👤 ${esc(CONTA.perfil.nome)} · 🪙 ${CONTA.perfil.moedasLocal} · 💎 ${CONTA.perfil.moedasOnline}` : '👤 ENTRAR / CRIAR CONTA'}</button>
+      <button class="link-novidades" onclick="telaLoja()">🛒 LOJA</button>
+      <button class="link-novidades" onclick="telaCassino()">🎰 CASSINO</button>
       <button class="link-novidades" onclick="telaRanking()">🏆 RANKING</button>
       <button class="link-novidades" onclick="abrirNovidades()">★ NOVIDADES DA ${serie(VERSAO)}</button>
     </div>
@@ -223,7 +234,10 @@ function iniciarConta() {
     ouvirConta((user, perfil, erro) => {
       const entrou = !CONTA.perfil && perfil;
       CONTA = { user, perfil };
+      aplicarGramado();
       if ($app.querySelector('.tv')) telaMenu();
+      else if ($app.querySelector('.tela-loja')) telaLoja();   // comprou/equipou: saldo e botões se atualizam
+      // o cassino não redesenha sozinho: o saldo novo só aparece no fim da animação (senão entregava o resultado)
       else if ($app.querySelector('.tela-conta')) {
         if (erro) telaConta(SO.modoConta, 'Entrou, mas não consegui salvar o perfil: confira as regras do banco (database.rules.json).');
         else telaConta(SO.modoConta, '', entrou);
@@ -301,7 +315,7 @@ async function telaRanking(aba = 'vitorias') {
     if (aba === 'vitorias') {
       const l = await topRanking('usuarios', 'vitorias');
       html = l.length ? `<div class="tabela"><table><tr><th>#</th><th>Jogador</th><th>Vitórias</th><th>Títulos</th></tr>
-        ${l.map((x, k) => `<tr><td>${k + 1}</td><td>${esc(x.nome)}</td><td><b>${x.vitorias}</b></td><td>${x.titulos}</td></tr>`).join('')}</table></div>` : '';
+        ${l.map((x, k) => `<tr><td>${k + 1}</td><td>${nomeEnfeitado(x.nome, x.equipado)}${tituloDe(x.equipado)}</td><td><b>${x.vitorias}</b></td><td>${x.titulos}</td></tr>`).join('')}</table></div>` : '';
     } else {
       const porChave = Object.fromEntries(Object.values(CLUBE).flatMap(c => c.jogadores).map(j => [chaveJogador(j.id), j]));
       const l = (await topRanking('estatisticas', aba)).filter(x => porChave[x.chave]);
@@ -321,6 +335,65 @@ async function pagarPremio(ganhos, salaId, texto) {
     if ($('premio') && texto) $('premio').textContent = texto;
   } catch { if ($('premio')) $('premio').textContent = '⚠ Não consegui salvar o prêmio na sua conta.'; }
 }
+
+// ---------- loja (v1.7; catálogo LOJA em online.js) ----------
+// Duas vitrines: 🪙 Offline (gramados e ajudas do modo local) e 💎 Online (visual que os outros veem e
+// vantagens de sala). Consumível guarda quantidade; o resto é permanente e se equipa, um por tipo.
+const tenho = id => CONTA.perfil?.itens?.[id] || 0;
+function aplicarGramado() {
+  const g = doTipo(CONTA.perfil?.equipado?.gramado, 'gramado');
+  if (g) raiz.dataset.gramado = g; else delete raiz.dataset.gramado;
+  salvarPref('gramado', g);   // o index.html aplica antes de tudo carregar, pra não piscar a grama padrão
+}
+function telaLoja(aba = SO.abaLoja || 'local', erro = '') {
+  SO.abaLoja = aba;
+  const p = CONTA.perfil, ic = ICONE_MOEDA[aba], saldo = p?.[CAMPO_MOEDA[aba]] ?? 0;
+  const item = it => {
+    const n = tenho(it.id), consumivel = it.tipo === 'consumivel', emUso = p?.equipado?.[it.tipo] === it.id;
+    const comprar = `<button class="btn" onclick="comprarClique('${it.id}')" ${p && saldo >= it.preco ? '' : 'disabled'}>${ic} ${it.preco}</button>`;
+    return `<div class="item-loja${emUso ? ' sel' : ''}">
+      <span class="item-icone" aria-hidden="true">${it.icone}</span>
+      <div><b>${it.nome}</b><small>${it.desc}</small>${consumivel && n ? `<small class="tem">Você tem ${n}</small>` : ''}</div>
+      ${consumivel || !n ? comprar : `<button class="btn${emUso ? '' : ' sec'}" aria-pressed="${emUso}" onclick="equiparClique('${it.id}')">${emUso ? 'Em uso' : 'Usar'}</button>`}
+    </div>`;
+  };
+  const grupo = (titulo, itens) => `<h3>${titulo}</h3><div class="itens-loja">${itens.map(item).join('')}</div>`;
+  const daAba = LOJA.filter(it => it.loja === aba);
+  $app.innerHTML = `
+  <section class="tela tela-loja">
+    <button class="voltar" onclick="telaMenu()">← Menu</button>
+    <h2>🛒 Loja</h2>
+    <div class="abas-conta" role="tablist">
+      <button class="${aba === 'local' ? 'ativa' : ''}" role="tab" aria-selected="${aba === 'local'}" onclick="telaLoja('local')">🪙 Offline</button>
+      <button class="${aba === 'online' ? 'ativa' : ''}" role="tab" aria-selected="${aba === 'online'}" onclick="telaLoja('online')">💎 Online</button>
+    </div>
+    ${p ? `<p>Seu saldo: <b>${ic} ${saldo}</b> <small class="dica">${aba === 'local' ? 'moedas, ganhas contra bots' : 'diamantes, ganhos no online'}</small></p>`
+      : '<p class="aviso-erro">Pra comprar, <button class="link" onclick="telaConta()">entre na sua conta</button>.</p>'}
+    ${erro ? `<p class="aviso-erro" role="alert">⚠ ${esc(erro)}</p>` : ''}
+    ${grupo(aba === 'local' ? 'Gramados' : 'Visual (os outros veem)', daAba.filter(it => it.tipo !== 'consumivel'))}
+    ${grupo(aba === 'local' ? 'Ajudas contra bots (gasta ao usar)' : 'Vantagens de sala (gasta ao usar)', daAba.filter(it => it.tipo === 'consumivel'))}
+    <p class="dica">${aba === 'local' ? 'As ajudas aparecem na hora, durante o draft local.' : 'As vantagens são ativadas na sala de espera, e todo mundo da sala vê quem ativou.'}
+      Moeda não vira diamante nem o contrário. Dá pra tentar a sorte no <button class="link" onclick="telaCassino()">🎰 cassino</button>.</p>
+  </section>`;
+}
+// A tela se redesenha sozinha quando o perfil muda (iniciarConta); aqui só trata o que deu errado.
+async function comprarClique(id) {
+  const it = ITEM[id], p = CONTA.perfil;
+  if (!p || p[CAMPO_MOEDA[it.loja]] < it.preco || (it.tipo !== 'consumivel' && tenho(id))) return;
+  try { await comprarItem(CONTA.user.uid, it); }
+  catch { telaLoja(it.loja, 'Não consegui comprar (sem internet, ou as regras novas do banco ainda não foram publicadas).'); }
+}
+function equiparClique(id) {
+  const it = ITEM[id];
+  equiparItem(CONTA.user.uid, it.tipo, CONTA.perfil.equipado?.[it.tipo] === id ? null : id)
+    .catch(() => telaLoja(it.loja, 'Não consegui salvar a troca.'));
+}
+// Gasta 1 consumível da conta. true = gastou (aí o efeito vale).
+async function usarItem(id) {
+  if (!tenho(id)) return false;
+  try { await gastarItem(CONTA.user.uid, id); return true; } catch { return false; }
+}
+const meuVisual = () => { const e = CONTA.perfil?.equipado || {}; return { cor: e.cor || null, emblema: e.emblema || null, titulo: e.titulo || null }; };
 
 // Menu navegável no teclado como nos consoles: ← → movem o cursor ▶, Enter/Espaço escolhem.
 // Mouse/toque também move o cursor (hover/foco), pra ▶ sempre marcar o que vai ser escolhido.
@@ -436,9 +509,10 @@ function telaRoleta() {
   </section>`;
 }
 
-function girar() {
+// fora = clube que acabou de sair e foi recusado com o item "Roleta de novo" (v1.7)
+function girar(fora) {
   $('girar').disabled = true;
-  const sorteado = sortear(S.restantes), ALVO = opcoes.turbo ? 14 : 44;
+  const sorteado = sortear(S.restantes.filter(id => id !== fora)), ALVO = opcoes.turbo ? 14 : 44;
   const ids = Array.from({ length: ALVO + 6 }, () => sortear(S.restantes));
   ids[ALVO] = sorteado;
   const faixa = $('faixa');
@@ -451,8 +525,22 @@ function girar() {
   faixa.addEventListener('transitionend', () => {
     carta.classList.add('vencedor');
     S.clube = sorteado;
-    $('resultado').innerHTML = `<p>Saiu ${mini(sorteado)} <strong>${CLUBE[sorteado].nome}</strong>!</p><button class="btn" onclick="S.vez = 0; proximaVez()">Começar escolhas</button>`;
+    const deNovo = S.restantes.length > 1 && !S.girouDeNovo && tenho('roleta');
+    $('resultado').innerHTML = `<p>Saiu ${mini(sorteado)} <strong>${CLUBE[sorteado].nome}</strong>!</p><div class="acoes centralizado"><button class="btn" onclick="S.vez = 0; proximaVez()">Começar escolhas</button>${
+      deNovo ? `<button class="btn sec" onclick="this.disabled = true; girarDeNovo()">🔄 Girar de novo (tem ${tenho('roleta')})</button>` : ''}</div>`;
   }, { once: true });
+}
+async function girarDeNovo() {
+  const saiu = S.clube;
+  if (!await usarItem('roleta')) return;
+  S.girouDeNovo = true;   // 1 por rodada; zera em proximaVez quando o clube termina
+  telaRoleta();
+  girar(saiu);
+}
+async function usarOlheiro() {
+  if (!await usarItem('olheiro')) return;
+  S.olheiro = `${S.clube}|${S.vez}`;   // vale pra esta pessoa, neste clube
+  telaEscolha();
 }
 
 // ---------- escolha às cegas ----------
@@ -478,6 +566,7 @@ function proximaVez() {
   if (S.vez < S.ordem.length) return humanos() > 1 ? telaVez() : telaEscolha();
   S.restantes = S.restantes.filter(id => id !== S.clube);
   S.clube = null;
+  S.girouDeNovo = false;
   S.restantes.length ? telaRoleta() : telaSuspense();
 }
 
@@ -495,6 +584,9 @@ function telaVez() {
 function telaEscolha(sel) {
   const t = timeDaVez(), c = CLUBE[S.clube], j = c.jogadores[sel], cego = opcoes.cego;
   const pc = modoAtual().porClube, ja = minhasDaRodada(t).map(p => p.j.id);
+  const olho = S.olheiro === `${S.clube}|${S.vez}`;   // item Olheiro (v1.7): mostra os overalls da lista deste clube
+  const btnOlho = cego && !olho && tenho('olheiro')
+    ? `<p><button class="btn sec" onclick="this.disabled = true; usarOlheiro()">🔍 Usar Olheiro (tem ${tenho('olheiro')})</button></p>` : '';
   const qual = pc > 1 ? ` <small class="dica">(escolha ${ja.length + 1} de ${pc})</small>` : '';
   let acao = `<p class="dica">Toque num jogador pra escalar. Jogador de posição já preenchida só entra como reserva.${
     ja.length ? ` Você já pegou ${ja.map(id => esc(c.jogadores.find(x => x.id === id).nome)).join(', ')} deste clube.` : ''}</p>`;
@@ -510,11 +602,12 @@ function telaEscolha(sel) {
   <section class="tela">
     ${cabecalhoRodada()}
     <h2>${mini(c.id)} ${esc(t.nome)}: escolha do ${c.nome}${qual}</h2>
+    ${btnOlho}
     ${j ? '' : acao}
     <div class="escolha">
       <div class="lista">${c.jogadores.map((p, i) => `
         <button class="jogador${i === sel ? ' sel' : ''}${ja.includes(p.id) ? ' meu' : ''}" onclick="telaEscolha(${i})" ${slotsLivres(t, p.pos).length && !ja.includes(p.id) ? '' : 'disabled'}>
-          <span class="pos">${p.pos}</span><span class="nome">${esc(p.nome)}</span><span class="ovr">${cego ? '??' : p.ovr}</span>
+          <span class="pos">${p.pos}</span><span class="nome">${esc(p.nome)}</span><span class="ovr">${cego && !olho ? '??' : p.ovr}</span>
         </button>`).join('')}</div>
       <div>${placa(t, cego)}${campo(t, cego)}</div>
     </div>
@@ -579,7 +672,7 @@ async function criarSalaClique() {
   salvarPref('nomeOnline', nome);
   $('oBtn').disabled = true;
   try {
-    const codigo = await criarSalaOnline(nome, SO.formacao, SO.cego, SO.velocidade, SO.modo || 'g12');
+    const codigo = await criarSalaOnline(nome, SO.formacao, SO.cego, SO.velocidade, SO.modo || 'g12', meuVisual());
     telaSalaCriada(codigo);
   } catch (e) { $('oErro').textContent = '⚠ ' + e.message; $('oBtn').disabled = false; }
 }
@@ -627,7 +720,7 @@ async function entrarSalaClique() {
   salvarPref('nomeOnline', nome);
   $('oBtn').disabled = true;
   try {
-    await entrarSalaOnline(codigo, nome);
+    await entrarSalaOnline(codigo, nome, meuVisual());
     entrarNaSalaLocal(codigo);
   } catch (e) { $('oErro').textContent = '⚠ ' + e.message; $('oBtn').disabled = false; }
 }
@@ -678,12 +771,19 @@ function roteirarOnline() {
 // ---------- lobby ----------
 function telaLobbyOnline() {
   const sala = SO.sala, participantes = Object.values(sala.participantes), souAnfitriao = sala.anfitriao === meuId();
+  // vantagens da loja (v1.7): só aparecem pra quem tem o item; o Olheiro só serve em sala às cegas
+  const eu = sala.participantes[meuId()];
+  const vantagens = Object.entries(VANTAGENS)
+    .filter(([id, campo]) => !eu[campo] && tenho(id) && (campo !== 'olheiro' || sala.cego))
+    .map(([id, campo]) => `<button class="btn sec" onclick="this.disabled = true; ativarVantagemClique('${id}', '${campo}')">${ITEM[id].icone} Usar ${ITEM[id].nome} (tem ${tenho(id)})</button>`);
   $app.innerHTML = `
   <section class="tela centro">
     <p class="dica">Sala <b>${esc(SO.codigo)}</b> · manda esse código pros seus amigos</p>
     <h2 class="grande">Sala de espera</h2>
-    <ul class="espera-lista">${participantes.map(p => `<li>${p.bot ? '🤖' : '👤'} ${esc(p.nome)}</li>`).join('')}</ul>
+    <ul class="espera-lista">${participantes.map(p => `<li>${p.bot ? '🤖' : '👤'} ${nomeEnfeitado(p.nome, p.visual)}${tituloDe(p.visual)}${
+      p.reforco ? ' <span class="bonus">⚡ Reforço +1</span>' : ''}${p.olheiro ? ' <span class="bonus">🔍 Olheiro</span>' : ''}</li>`).join('')}</ul>
     <p class="dica">${bandeira(modoDe(sala.modo).bandeira)} ${modoDe(sala.modo).nome} · ${sala.formacao} · ${sala.cego ? '🙈 às cegas' : '👀 overalls visíveis'} · ${NOME_VELOCIDADE[sala.velocidade]}</p>
+    ${vantagens.length ? `<div class="acoes centralizado">${vantagens.join('')}</div>` : ''}
     ${souAnfitriao ? `
       <div class="acoes centralizado">${Object.keys(NIVEIS).map(n => `<button class="btn sec" onclick="adicionarBotClique('${n}')">+ ${NIVEIS[n]} 🤖</button>`).join('')}</div>
       <button class="btn" ${participantes.length < 2 ? 'disabled' : ''} onclick="comecarDraftClique()">Começar o draft pra todo mundo 🎲</button>
@@ -691,6 +791,10 @@ function telaLobbyOnline() {
   </section>`;
 }
 async function adicionarBotClique(nivel) { await adicionarBotOnline(SO.codigo, nivel); }
+// gasta o item da conta e marca no participante; a sala redesenha sozinha pra todo mundo
+async function ativarVantagemClique(id, campo) {
+  if (SO.sala.estado === 'lobby' && await usarItem(id)) await marcarVantagemOnline(SO.codigo, campo);
+}
 async function comecarDraftClique() { await iniciarDraftOnline(SO.codigo); }
 
 // ---------- draft (rodada a rodada, roleta ao vivo) ----------
@@ -725,6 +829,7 @@ function telaRoletaVivaOnline() {
 function telaEscolherRodadaOnline(sel) {
   const sala = SO.sala, rodada = sala.rodadaAtual, c = CLUBE[sala.clubesOrdem[rodada]], cego = sala.cego;
   const meuTime = meuTimeParcial(sala), pc = modoDe(sala.modo).porClube;
+  const olho = !!sala.participantes[meuId()].olheiro;   // vantagem da loja (v1.7): vê os overalls da lista
   const ja = picksDaRodada(sala.participantes[meuId()], rodada, pc).map(p => p.jogador);
   const qual = pc > 1 ? ` <small class="dica">(escolha ${ja.length + 1} de ${pc})</small>` : '';
   let acao = `<p class="dica">Toque num jogador pra escalar. Jogador de posição já preenchida só entra como reserva.${
@@ -745,7 +850,7 @@ function telaEscolherRodadaOnline(sel) {
     <div class="escolha">
       <div class="lista">${c.jogadores.map((p, i) => `
         <button class="jogador${i === sel ? ' sel' : ''}${ja.includes(p.id) ? ' meu' : ''}" onclick="telaEscolherRodadaOnline(${i})" ${slotsLivres(meuTime, p.pos).length && !ja.includes(p.id) ? '' : 'disabled'}>
-          <span class="pos">${p.pos}</span><span class="nome">${esc(p.nome)}</span><span class="ovr">${cego ? '??' : p.ovr}</span></button>`).join('')}</div>
+          <span class="pos">${p.pos}</span><span class="nome">${esc(p.nome)}</span><span class="ovr">${cego && !olho ? '??' : p.ovr}</span></button>`).join('')}</div>
       <div>${placa(meuTime, cego)}${campo(meuTime, cego)}</div>
     </div>
     ${sel != null ? acao : ''}
@@ -771,7 +876,7 @@ function telaEsperaRodadaOnline() {
   <section class="tela centro espera-rodada">
     <p class="dica">Rodada ${sala.rodadaAtual + 1}/${sala.clubesOrdem.length}</p>
     <h2 class="grande">${prontos}/${participantes.length} escolheram</h2>
-    <ul class="espera-lista">${participantes.map(p => `<li>${fezRodada(sala, p, sala.rodadaAtual) ? '✅' : '⏳'} ${esc(p.nome)}${p.bot ? ' 🤖' : ''}</li>`).join('')}</ul>
+    <ul class="espera-lista">${participantes.map(p => `<li>${fezRodada(sala, p, sala.rodadaAtual) ? '✅' : '⏳'} ${nomeEnfeitado(p.nome, p.visual)}${p.bot ? ' 🤖' : ''}</li>`).join('')}</ul>
     ${souAnfitriao
       ? `<button class="btn" ${todosProntos ? '' : 'disabled'} onclick="${ultimaRodada ? 'irPraRevelacaoClique()' : 'proximaRodadaClique()'}">${ultimaRodada ? 'Todo mundo pronto! Ver a revelação 🎭' : 'Todo mundo pronto! Próxima rodada 🎲'}</button>`
       : '<p class="dica">Só quem criou a sala avança a rodada.</p>'}
@@ -801,7 +906,7 @@ function telaRevelacaoOnline() {
     <h2>${CLUBE[id].nome}</h2>
     <div class="cartas">${picks.map((x, k) => { const j = jogadorPorId(x.pick.jogador); return `
       <div class="carta${conta[x.pick.jogador] > 1 ? ' repetido' : ''}" style="animation-delay:${k * passo}s">
-        <small>${x.p.bot ? '🤖 ' : ''}${esc(x.p.nome)}</small>
+        <small>${x.p.bot ? '🤖 ' : ''}${nomeEnfeitado(x.p.nome, x.p.visual)}</small>
         <b>${esc(j.nome)}</b>
         <span>${x.pick.slot === RES ? 'Banco' : slotsFormacao[x.pick.slot]}${sala.cego ? '' : ` · ${j.ovr}`}</span>
         ${conta[x.pick.jogador] > 1 ? `<em style="animation-delay:${picks.length * passo}s">REPETIDO</em>` : ''}
@@ -851,7 +956,7 @@ function telaEsperaTaticaOnline() {
   <section class="tela centro espera-rodada">
     <p class="dica">Sala ${esc(SO.codigo)}</p>
     <h2 class="grande">${prontos}/${humanos.length} escolheram a tática</h2>
-    <ul class="espera-lista">${participantes.map(p => `<li>${(p.bot || p.taticaPronto) ? '✅' : '⏳'} ${esc(p.nome)}${p.bot ? ' 🤖' : ''}</li>`).join('')}</ul>
+    <ul class="espera-lista">${participantes.map(p => `<li>${(p.bot || p.taticaPronto) ? '✅' : '⏳'} ${nomeEnfeitado(p.nome, p.visual)}${p.bot ? ' 🤖' : ''}</li>`).join('')}</ul>
     ${souAnfitriao
       ? `<button class="btn" ${todosProntos ? '' : 'disabled'} onclick="comecarJogosClique()">Todo mundo pronto! Bola rolando ⚽</button>`
       : '<p class="dica">Só quem criou a sala inicia as partidas.</p>'}
